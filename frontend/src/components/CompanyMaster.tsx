@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Building2, Save, FileText, Upload, Edit, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { exportToExcel, EXCEL_TEMPLATES } from "@/utils/excelUtils";
+import { exportToExcel, } from "@/utils/excelUtils";
 import ExcelImportDialog from "./ExcelImportDialog";
 import {
   createCompanyApi,
@@ -21,6 +21,7 @@ import {
   updateCompanyApi,
 } from "@/api/company.api";
 import { CompanyData } from "@/types/company.types";
+import { EXCEL_MODULE_NAMES, EXCEL_TEMPLATES } from "@/types/excel.types";
 
 const CompanyMaster = () => {
   const { toast } = useToast();
@@ -211,18 +212,18 @@ const CompanyMaster = () => {
   };
 
   const handleExcelExport = () => {
-    const exportData = companies.map((company) => ({
-      "Company Name": company.companyName,
-      "Email Address": company.emailAddress,
-      "Company Address": company.companyAddress,
-      "Contact Number": company.contactNumber,
-      "GST Number": company.gstNumber,
-      "PAN Number": company.panNumber,
-      "CIN Number": company.cinNumber,
-      "Contact Person Name": company.contactPersonName,
-    }));
+    const exportData = companies.map((company) => [
+      company.companyName,
+      company.cinNumber,
+      company.panNumber,
+      company.gstNumber,
+      company.companyAddress,
+      company.contactPersonName,
+      company.contactNumber,
+      company.emailAddress,
+    ]);
 
-    exportToExcel(exportData, "CompanyMaster", EXCEL_TEMPLATES.companies);
+    exportToExcel(exportData, EXCEL_MODULE_NAMES.COMPANY_MASTER, EXCEL_TEMPLATES.companies);
   };
 
   return (

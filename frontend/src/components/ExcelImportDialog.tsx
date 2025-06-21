@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Upload, Download, X, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { readExcelFile, validateImportData, downloadTemplate, EXCEL_TEMPLATES } from "@/utils/excelUtils";
+import { readExcelFile, validateImportData, downloadTemplate } from "@/utils/excelUtils";
+import { EXCEL_TEMPLATES } from "@/types/excel.types";
 
 interface ExcelImportDialogProps {
   isOpen: boolean;

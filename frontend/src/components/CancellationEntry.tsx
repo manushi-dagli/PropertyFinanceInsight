@@ -9,7 +9,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Ban, Plus, Edit, Trash2, Save, X, Upload, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ExcelImportDialog from "./ExcelImportDialog";
-import { exportToExcel, EXCEL_TEMPLATES } from "@/utils/excelUtils";
+import { exportToExcel } from "@/utils/excelUtils";
+import { EXCEL_TEMPLATES, EXCEL_MODULE_NAMES } from "@/types/excel.types";
 
 interface Customer {
   id: string;
@@ -381,7 +382,7 @@ const CancellationEntry = ({ reportingDate }: { reportingDate: string }) => {
       payment.remarks || ''
     ]);
 
-    exportToExcel(exportData, 'CancellationEntry', EXCEL_TEMPLATES.cancellations);
+    exportToExcel(exportData, EXCEL_MODULE_NAMES.CANCELLATION_MASTER, EXCEL_TEMPLATES.cancellations);
     
     toast({
       title: "Success",

@@ -9,7 +9,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Users, Save, Edit, Trash2, Plus, Minus, X, RefreshCw, Upload, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ExcelImportDialog from "./ExcelImportDialog";
-import { exportToExcel, EXCEL_TEMPLATES } from "@/utils/excelUtils";
+import { exportToExcel } from "@/utils/excelUtils";
+import { EXCEL_TEMPLATES, EXCEL_MODULE_NAMES } from "@/types/excel.types";
 
 interface CustomerData {
   id: string;
@@ -437,7 +438,7 @@ const CustomerMaster = ({ reportingDate }: { reportingDate: string }) => {
     customer.flatNumber
   ]);
 
-  exportToExcel(exportData, 'CustomerMaster', EXCEL_TEMPLATES.customers);
+  exportToExcel(exportData, EXCEL_MODULE_NAMES.CUSTOMER_MASTER, EXCEL_TEMPLATES.customers);
 
   toast({
     title: "Success",

@@ -1,15 +1,44 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { IndianRupee, Plus, Edit, Trash2, Save, X, Upload, Download } from "lucide-react";
+import {
+  IndianRupee,
+  Plus,
+  Edit,
+  Trash2,
+  Save,
+  X,
+  Upload,
+  Download,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ExcelImportDialog from "./ExcelImportDialog";
-import { exportToExcel, EXCEL_TEMPLATES } from "@/utils/excelUtils";
+import { exportToExcel } from "@/utils/excelUtils";
+import { EXCEL_MODULE_NAMES, EXCEL_TEMPLATES } from "@/types/excel.types";
 
 interface Customer {
   id: string;
@@ -56,7 +85,9 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
   const [bookingPayments, setBookingPayments] = useState<BookingPayment[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(
+    null
+  );
   const [jointOwners, setJointOwners] = useState<JointOwner[]>([]);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [selectedPayments, setSelectedPayments] = useState<string[]>([]);
@@ -79,31 +110,31 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
     companyAccountNo: "",
     agreementValue: 0,
     bookingAmount: 0,
-    outstandingAmount: 0
+    outstandingAmount: 0,
   });
 
   useEffect(() => {
-    const savedCustomers = localStorage.getItem('customers');
+    const savedCustomers = localStorage.getItem("customers");
     if (savedCustomers) {
       setCustomers(JSON.parse(savedCustomers));
     }
   }, []);
 
   useEffect(() => {
-    const savedBookingPayments = localStorage.getItem('bookingPayments');
+    const savedBookingPayments = localStorage.getItem("bookingPayments");
     if (savedBookingPayments) {
       setBookingPayments(JSON.parse(savedBookingPayments));
     }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('bookingPayments', JSON.stringify(bookingPayments));
+    localStorage.setItem("bookingPayments", JSON.stringify(bookingPayments));
   }, [bookingPayments]);
 
   const handleSelectAll = (checked: boolean) => {
     setSelectAll(checked);
     if (checked) {
-      setSelectedPayments(bookingPayments.map(payment => payment.id));
+      setSelectedPayments(bookingPayments.map((payment) => payment.id));
     } else {
       setSelectedPayments([]);
     }
@@ -111,9 +142,9 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
 
   const handleSelectPayment = (paymentId: string, checked: boolean) => {
     if (checked) {
-      setSelectedPayments(prev => [...prev, paymentId]);
+      setSelectedPayments((prev) => [...prev, paymentId]);
     } else {
-      setSelectedPayments(prev => prev.filter(id => id !== paymentId));
+      setSelectedPayments((prev) => prev.filter((id) => id !== paymentId));
       setSelectAll(false);
     }
   };
@@ -123,18 +154,20 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
       toast({
         title: "No Selection",
         description: "Please select payments to delete",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
 
-    setBookingPayments(prev => prev.filter(payment => !selectedPayments.includes(payment.id)));
+    setBookingPayments((prev) =>
+      prev.filter((payment) => !selectedPayments.includes(payment.id))
+    );
     setSelectedPayments([]);
     setSelectAll(false);
-    
+
     toast({
       title: "Success",
-      description: `${selectedPayments.length} payment(s) deleted successfully`
+      description: `${selectedPayments.length} payment(s) deleted successfully`,
     });
   };
 
@@ -143,7 +176,7 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
       toast({
         title: "No Data",
         description: "No payments to delete",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -151,28 +184,32 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
     setBookingPayments([]);
     setSelectedPayments([]);
     setSelectAll(false);
-    
+
     toast({
       title: "Success",
-      description: "All payments deleted successfully"
+      description: "All payments deleted successfully",
     });
   };
 
   const handleCustomerChange = (customerId: string) => {
-    const customer = customers.find(c => c.id === customerId);
+    const customer = customers.find((c) => c.id === customerId);
     if (customer) {
       setSelectedCustomer(customer);
-      
-      const savedJointOwners = localStorage.getItem(`jointOwners_${customerId}`);
+
+      const savedJointOwners = localStorage.getItem(
+        `jointOwners_${customerId}`
+      );
       if (savedJointOwners) {
         setJointOwners(JSON.parse(savedJointOwners));
       } else {
         setJointOwners([]);
       }
 
-      const existingPayment = bookingPayments.find(p => p.customerId === customerId);
-      
-      setCurrentPayment(prev => ({
+      const existingPayment = bookingPayments.find(
+        (p) => p.customerId === customerId
+      );
+
+      setCurrentPayment((prev) => ({
         ...prev,
         customerId: customer.id,
         customerName: customer.customerName,
@@ -182,34 +219,49 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
         payerName: customer.customerName,
         agreementValue: existingPayment?.agreementValue || 0,
         bookingAmount: existingPayment?.bookingAmount || 0,
-        outstandingAmount: existingPayment?.outstandingAmount || 0
+        outstandingAmount: existingPayment?.outstandingAmount || 0,
       }));
     }
   };
 
-  const calculateOutstandingAmount = (agreementValue: number, totalPaidSoFar: number) => {
+  const calculateOutstandingAmount = (
+    agreementValue: number,
+    totalPaidSoFar: number
+  ) => {
     return Math.max(0, agreementValue - totalPaidSoFar);
   };
 
   const getTotalPaidForCustomer = (customerId: string, excludeId?: string) => {
     return bookingPayments
-      .filter(p => p.customerId === customerId && p.id !== excludeId)
+      .filter((p) => p.customerId === customerId && p.id !== excludeId)
       .reduce((sum, p) => sum + p.amountPaid, 0);
   };
 
-  const handleInputChange = (field: keyof BookingPayment, value: string | number) => {
-    setCurrentPayment(prev => {
+  const handleInputChange = (
+    field: keyof BookingPayment,
+    value: string | number
+  ) => {
+    setCurrentPayment((prev) => {
       const updated = {
         ...prev,
-        [field]: field === 'amountPaid' || field === 'agreementValue' || field === 'bookingAmount' 
-          ? (parseFloat(value as string) || 0) 
-          : value
+        [field]:
+          field === "amountPaid" ||
+          field === "agreementValue" ||
+          field === "bookingAmount"
+            ? parseFloat(value as string) || 0
+            : value,
       };
 
-      if (field === 'agreementValue' || field === 'amountPaid') {
-        const totalPaidSoFar = getTotalPaidForCustomer(updated.customerId, editingId);
+      if (field === "agreementValue" || field === "amountPaid") {
+        const totalPaidSoFar = getTotalPaidForCustomer(
+          updated.customerId,
+          editingId
+        );
         const newTotalPaid = totalPaidSoFar + (updated.amountPaid || 0);
-        updated.outstandingAmount = calculateOutstandingAmount(updated.agreementValue, newTotalPaid);
+        updated.outstandingAmount = calculateOutstandingAmount(
+          updated.agreementValue,
+          newTotalPaid
+        );
       }
 
       return updated;
@@ -221,7 +273,7 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
       toast({
         title: "Validation Error",
         description: "Please select a customer",
-        variant: "destructive"
+        variant: "destructive",
       });
       return false;
     }
@@ -230,7 +282,7 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
       toast({
         title: "Validation Error",
         description: "Payment date is required",
-        variant: "destructive"
+        variant: "destructive",
       });
       return false;
     }
@@ -239,7 +291,7 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
       toast({
         title: "Validation Error",
         description: "Amount paid must be greater than 0",
-        variant: "destructive"
+        variant: "destructive",
       });
       return false;
     }
@@ -248,7 +300,7 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
       toast({
         title: "Validation Error",
         description: "Payer name is required",
-        variant: "destructive"
+        variant: "destructive",
       });
       return false;
     }
@@ -257,19 +309,22 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
       toast({
         title: "Validation Error",
         description: "Agreement value must be greater than 0",
-        variant: "destructive"
+        variant: "destructive",
       });
       return false;
     }
 
-    const totalPaidSoFar = getTotalPaidForCustomer(currentPayment.customerId, editingId);
+    const totalPaidSoFar = getTotalPaidForCustomer(
+      currentPayment.customerId,
+      editingId
+    );
     const remainingAmount = currentPayment.agreementValue - totalPaidSoFar;
-    
+
     if (currentPayment.amountPaid > remainingAmount) {
       toast({
         title: "Validation Error",
         description: `Payment amount (₹${currentPayment.amountPaid.toLocaleString()}) cannot exceed outstanding balance (₹${remainingAmount.toLocaleString()})`,
-        variant: "destructive"
+        variant: "destructive",
       });
       return false;
     }
@@ -280,38 +335,54 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
   const handleSave = () => {
     if (!validatePayment()) return;
 
-    const totalPaidSoFar = getTotalPaidForCustomer(currentPayment.customerId, editingId);
+    const totalPaidSoFar = getTotalPaidForCustomer(
+      currentPayment.customerId,
+      editingId
+    );
     const newTotalPaid = totalPaidSoFar + currentPayment.amountPaid;
-    const newOutstandingAmount = calculateOutstandingAmount(currentPayment.agreementValue, newTotalPaid);
+    const newOutstandingAmount = calculateOutstandingAmount(
+      currentPayment.agreementValue,
+      newTotalPaid
+    );
 
     const paymentToSave = {
       ...currentPayment,
-      outstandingAmount: newOutstandingAmount
+      outstandingAmount: newOutstandingAmount,
     };
 
     if (editingId) {
-      setBookingPayments(prev => prev.map(payment => 
-        payment.id === editingId ? { ...paymentToSave, id: editingId } : payment
-      ));
+      setBookingPayments((prev) =>
+        prev.map((payment) =>
+          payment.id === editingId
+            ? { ...paymentToSave, id: editingId }
+            : payment
+        )
+      );
       setEditingId(null);
       toast({
         title: "Success",
-        description: "Booking payment updated successfully"
+        description: "Booking payment updated successfully",
       });
     } else {
       const newPayment = { ...paymentToSave, id: Date.now().toString() };
-      setBookingPayments(prev => [...prev, newPayment]);
+      setBookingPayments((prev) => [...prev, newPayment]);
       toast({
         title: "Success",
-        description: "Booking payment added successfully"
+        description: "Booking payment added successfully",
       });
     }
 
-    setBookingPayments(prev => prev.map(payment => 
-      payment.customerId === currentPayment.customerId 
-        ? { ...payment, agreementValue: currentPayment.agreementValue, outstandingAmount: newOutstandingAmount }
-        : payment
-    ));
+    setBookingPayments((prev) =>
+      prev.map((payment) =>
+        payment.customerId === currentPayment.customerId
+          ? {
+              ...payment,
+              agreementValue: currentPayment.agreementValue,
+              outstandingAmount: newOutstandingAmount,
+            }
+          : payment
+      )
+    );
 
     handleCancel();
   };
@@ -320,11 +391,13 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
     setCurrentPayment(payment);
     setEditingId(payment.id);
     setShowAddForm(true);
-    
-    const customer = customers.find(c => c.id === payment.customerId);
+
+    const customer = customers.find((c) => c.id === payment.customerId);
     if (customer) {
       setSelectedCustomer(customer);
-      const savedJointOwners = localStorage.getItem(`jointOwners_${customer.id}`);
+      const savedJointOwners = localStorage.getItem(
+        `jointOwners_${customer.id}`
+      );
       if (savedJointOwners) {
         setJointOwners(JSON.parse(savedJointOwners));
       }
@@ -332,25 +405,34 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
   };
 
   const handleDelete = (id: string) => {
-    const paymentToDelete = bookingPayments.find(p => p.id === id);
+    const paymentToDelete = bookingPayments.find((p) => p.id === id);
     if (!paymentToDelete) return;
 
-    const otherPayments = bookingPayments.filter(p => p.id !== id && p.customerId === paymentToDelete.customerId);
-    const totalPaidAfterDeletion = otherPayments.reduce((sum, p) => sum + p.amountPaid, 0);
-    const newOutstandingAmount = calculateOutstandingAmount(paymentToDelete.agreementValue, totalPaidAfterDeletion);
+    const otherPayments = bookingPayments.filter(
+      (p) => p.id !== id && p.customerId === paymentToDelete.customerId
+    );
+    const totalPaidAfterDeletion = otherPayments.reduce(
+      (sum, p) => sum + p.amountPaid,
+      0
+    );
+    const newOutstandingAmount = calculateOutstandingAmount(
+      paymentToDelete.agreementValue,
+      totalPaidAfterDeletion
+    );
 
-    setBookingPayments(prev => 
-      prev.filter(payment => payment.id !== id)
-          .map(payment => 
-            payment.customerId === paymentToDelete.customerId 
-              ? { ...payment, outstandingAmount: newOutstandingAmount }
-              : payment
-          )
+    setBookingPayments((prev) =>
+      prev
+        .filter((payment) => payment.id !== id)
+        .map((payment) =>
+          payment.customerId === paymentToDelete.customerId
+            ? { ...payment, outstandingAmount: newOutstandingAmount }
+            : payment
+        )
     );
 
     toast({
       title: "Success",
-      description: "Booking payment deleted successfully"
+      description: "Booking payment deleted successfully",
     });
   };
 
@@ -376,7 +458,7 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
       companyAccountNo: "",
       agreementValue: 0,
       bookingAmount: 0,
-      outstandingAmount: 0
+      outstandingAmount: 0,
     });
   };
 
@@ -388,14 +470,16 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
 
   const getAvailablePayers = () => {
     const payers = [selectedCustomer?.customerName];
-    jointOwners.forEach(owner => payers.push(owner.name));
+    jointOwners.forEach((owner) => payers.push(owner.name));
     return payers.filter(Boolean);
   };
 
   const getCurrentOutstandingForCustomer = (customerId: string) => {
-    const customerPayments = bookingPayments.filter(p => p.customerId === customerId);
+    const customerPayments = bookingPayments.filter(
+      (p) => p.customerId === customerId
+    );
     if (customerPayments.length === 0) return 0;
-    
+
     const latestPayment = customerPayments[customerPayments.length - 1];
     return latestPayment.outstandingAmount;
   };
@@ -405,71 +489,83 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
       toast({
         title: "No Data",
         description: "No booking payments available to export",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
 
-    const exportData = bookingPayments.map(payment => [
+    const exportData = bookingPayments.map((payment) => [
       payment.flatNumber,
       payment.customerName,
       formatDate(payment.paymentDate),
       payment.amountPaid,
       payment.modeOfPayment,
-      payment.customerAccountNo || '',
-      payment.customerBankName || ''
+      payment.customerAccountNo || "",
+      payment.customerBankName || "",
     ]);
 
-    exportToExcel(exportData, 'BookingEntry', EXCEL_TEMPLATES.bookings);
-    
+    exportToExcel(
+      exportData,
+      EXCEL_MODULE_NAMES.BOOKING_MASTER,
+      EXCEL_TEMPLATES.bookings
+    );
+
     toast({
       title: "Success",
-      description: "Booking payments exported successfully"
+      description: "Booking payments exported successfully",
     });
   };
 
   const handleImport = (data: any[]) => {
     try {
-      console.log('Raw booking import data:', data);
-      
+      console.log("Raw booking import data:", data);
+
       const importedPayments = data.map((row, index) => {
         console.log(`Processing booking row ${index + 1}:`, row);
-        
-        const flatNumber = row[0]?.toString() || '';
-        const customerName = row[1]?.toString() || '';
-        const bookingDate = row[2]?.toString() || '';
-        const amountReceived = parseFloat(row[3]) || 0;
-        const paymentMode = row[4]?.toString() || 'Cheque';
-        const referenceNo = row[5]?.toString() || '';
-        const bankName = row[6]?.toString() || '';
 
-        const customer = customers.find(c => 
-          c.customerName?.toLowerCase().trim() === customerName.toLowerCase().trim() && 
-          c.flatNumber === flatNumber
+        const flatNumber = row[0]?.toString() || "";
+        const customerName = row[1]?.toString() || "";
+        const bookingDate = row[2]?.toString() || "";
+        const amountReceived = parseFloat(row[3]) || 0;
+        const paymentMode = row[4]?.toString() || "Cheque";
+        const referenceNo = row[5]?.toString() || "";
+        const bankName = row[6]?.toString() || "";
+
+        const customer = customers.find(
+          (c) =>
+            c.customerName?.toLowerCase().trim() ===
+              customerName.toLowerCase().trim() && c.flatNumber === flatNumber
         );
-        
+
         if (!customer && customerName && flatNumber) {
-          console.warn(`Customer '${customerName}' with flat '${flatNumber}' not found`);
+          console.warn(
+            `Customer '${customerName}' with flat '${flatNumber}' not found`
+          );
         }
 
         if (amountReceived <= 0) {
-          throw new Error(`Row ${index + 2}: Amount received must be greater than 0`);
+          throw new Error(
+            `Row ${index + 2}: Amount received must be greater than 0`
+          );
         }
 
         let formattedDate = bookingDate;
-        if (typeof bookingDate === 'string' && bookingDate.includes('/')) {
-          const parts = bookingDate.split('/');
+        if (typeof bookingDate === "string" && bookingDate.includes("/")) {
+          const parts = bookingDate.split("/");
           if (parts.length === 3) {
-            formattedDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            formattedDate = `${parts[2]}-${parts[1].padStart(
+              2,
+              "0"
+            )}-${parts[0].padStart(2, "0")}`;
           }
         }
 
         return {
           id: Date.now().toString() + index,
-          customerId: customer?.id || '',
+          customerId: customer?.id || "",
           customerName: customer?.customerName || customerName,
-          projectName: customer?.projectName || '',
-          wingName: customer?.wingName || '',
+          projectName: customer?.projectName || "",
+          wingName: customer?.wingName || "",
           flatNumber: customer?.flatNumber || flatNumber,
           paymentDate: formattedDate,
           payerName: customer?.customerName || customerName,
@@ -477,25 +573,28 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
           amountPaid: amountReceived,
           customerBankName: bankName,
           customerAccountNo: referenceNo,
-          companyBankName: '',
-          companyAccountNo: '',
+          companyBankName: "",
+          companyAccountNo: "",
           agreementValue: 0,
           bookingAmount: 0,
-          outstandingAmount: 0
+          outstandingAmount: 0,
         };
       });
 
-      setBookingPayments(prev => [...prev, ...importedPayments]);
-      
+      setBookingPayments((prev) => [...prev, ...importedPayments]);
+
       toast({
         title: "Success",
-        description: `Imported ${importedPayments.length} booking payments successfully`
+        description: `Imported ${importedPayments.length} booking payments successfully`,
       });
     } catch (error) {
       toast({
         title: "Import Error",
-        description: error instanceof Error ? error.message : "Failed to import booking payments",
-        variant: "destructive"
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to import booking payments",
+        variant: "destructive",
       });
     }
   };
@@ -554,7 +653,9 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
                     checked={selectAll}
                     onCheckedChange={handleSelectAll}
                   />
-                  <Label htmlFor="select-all-payments">Select All ({bookingPayments.length})</Label>
+                  <Label htmlFor="select-all-payments">
+                    Select All ({bookingPayments.length})
+                  </Label>
                 </div>
                 {selectedPayments.length > 0 && (
                   <span className="text-sm text-gray-600">
@@ -607,14 +708,19 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <Label htmlFor="customer-select">Select Customer *</Label>
-                <Select value={currentPayment.customerId} onValueChange={handleCustomerChange}>
+                <Select
+                  value={currentPayment.customerId}
+                  onValueChange={handleCustomerChange}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a customer" />
                   </SelectTrigger>
                   <SelectContent>
                     {customers.map((customer) => (
                       <SelectItem key={customer.id} value={customer.id}>
-                        {customer.customerName} - {customer.companyName} - {customer.projectName} - {customer.wingName} - {customer.flatNumber}
+                        {customer.customerName} - {customer.companyName} -{" "}
+                        {customer.projectName} - {customer.wingName} -{" "}
+                        {customer.flatNumber}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -623,13 +729,18 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
 
               {selectedCustomer && (
                 <div className="p-3 bg-gray-50 rounded-lg">
-                  <h4 className="font-medium text-gray-900">Customer Details</h4>
+                  <h4 className="font-medium text-gray-900">
+                    Customer Details
+                  </h4>
                   <div className="text-sm text-gray-600 mt-1">
                     <p>Project: {selectedCustomer.projectName}</p>
                     <p>Wing: {selectedCustomer.wingName}</p>
                     <p>Flat: {selectedCustomer.flatNumber}</p>
                     <p className="font-medium text-red-600">
-                      Current Outstanding: ₹{getCurrentOutstandingForCustomer(selectedCustomer.id).toLocaleString()}
+                      Current Outstanding: ₹
+                      {getCurrentOutstandingForCustomer(
+                        selectedCustomer.id
+                      ).toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -644,13 +755,17 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
                   type="number"
                   step="0.01"
                   value={currentPayment.agreementValue || ""}
-                  onChange={(e) => handleInputChange("agreementValue", e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange("agreementValue", e.target.value)
+                  }
                   placeholder="0.00"
                 />
               </div>
 
               <div>
-                <Label htmlFor="outstanding-amount">Outstanding Amount (₹)</Label>
+                <Label htmlFor="outstanding-amount">
+                  Outstanding Amount (₹)
+                </Label>
                 <Input
                   id="outstanding-amount"
                   type="number"
@@ -666,18 +781,27 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <Label htmlFor="payment-date">Payment Date (DD/MM/YYYY) *</Label>
+                <Label htmlFor="payment-date">
+                  Payment Date (DD/MM/YYYY) *
+                </Label>
                 <Input
                   id="payment-date"
                   type="date"
                   value={currentPayment.paymentDate}
-                  onChange={(e) => handleInputChange("paymentDate", e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange("paymentDate", e.target.value)
+                  }
                 />
               </div>
 
               <div>
                 <Label htmlFor="payer-name">Payer Name *</Label>
-                <Select value={currentPayment.payerName} onValueChange={(value) => handleInputChange("payerName", value)}>
+                <Select
+                  value={currentPayment.payerName}
+                  onValueChange={(value) =>
+                    handleInputChange("payerName", value)
+                  }
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select payer" />
                   </SelectTrigger>
@@ -693,7 +817,12 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
 
               <div>
                 <Label htmlFor="mode-payment">Mode of Payment *</Label>
-                <Select value={currentPayment.modeOfPayment} onValueChange={(value) => handleInputChange("modeOfPayment", value)}>
+                <Select
+                  value={currentPayment.modeOfPayment}
+                  onValueChange={(value) =>
+                    handleInputChange("modeOfPayment", value)
+                  }
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -714,7 +843,9 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
                   type="number"
                   step="0.01"
                   value={currentPayment.amountPaid || ""}
-                  onChange={(e) => handleInputChange("amountPaid", e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange("amountPaid", e.target.value)
+                  }
                   placeholder="0.00"
                 />
               </div>
@@ -722,13 +853,17 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-4">
-                <h4 className="font-medium text-gray-900 border-b pb-2">Customer's Bank Details</h4>
+                <h4 className="font-medium text-gray-900 border-b pb-2">
+                  Customer's Bank Details
+                </h4>
                 <div>
                   <Label htmlFor="customer-bank">Bank Name</Label>
                   <Input
                     id="customer-bank"
                     value={currentPayment.customerBankName}
-                    onChange={(e) => handleInputChange("customerBankName", e.target.value)}
+                    onChange={(e) =>
+                      handleInputChange("customerBankName", e.target.value)
+                    }
                     placeholder="Customer's Bank Name"
                   />
                 </div>
@@ -737,20 +872,26 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
                   <Input
                     id="customer-account"
                     value={currentPayment.customerAccountNo}
-                    onChange={(e) => handleInputChange("customerAccountNo", e.target.value)}
+                    onChange={(e) =>
+                      handleInputChange("customerAccountNo", e.target.value)
+                    }
                     placeholder="Customer's Account Number"
                   />
                 </div>
               </div>
 
               <div className="space-y-4">
-                <h4 className="font-medium text-gray-900 border-b pb-2">Company's Bank Details</h4>
+                <h4 className="font-medium text-gray-900 border-b pb-2">
+                  Company's Bank Details
+                </h4>
                 <div>
                   <Label htmlFor="company-bank">Bank Name</Label>
                   <Input
                     id="company-bank"
                     value={currentPayment.companyBankName}
-                    onChange={(e) => handleInputChange("companyBankName", e.target.value)}
+                    onChange={(e) =>
+                      handleInputChange("companyBankName", e.target.value)
+                    }
                     placeholder="Company's Bank Name"
                   />
                 </div>
@@ -759,7 +900,9 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
                   <Input
                     id="company-account"
                     value={currentPayment.companyAccountNo}
-                    onChange={(e) => handleInputChange("companyAccountNo", e.target.value)}
+                    onChange={(e) =>
+                      handleInputChange("companyAccountNo", e.target.value)
+                    }
                     placeholder="Company's Account Number"
                   />
                 </div>
@@ -816,21 +959,29 @@ const BookingEntry = ({ reportingDate }: { reportingDate: string }) => {
                     <TableCell>
                       <Checkbox
                         checked={selectedPayments.includes(payment.id)}
-                        onCheckedChange={(checked) => handleSelectPayment(payment.id, checked as boolean)}
+                        onCheckedChange={(checked) =>
+                          handleSelectPayment(payment.id, checked as boolean)
+                        }
                       />
                     </TableCell>
                     <TableCell>{payment.customerName}</TableCell>
                     <TableCell>
                       <div className="text-sm">
                         <p>{payment.projectName}</p>
-                        <p className="text-gray-600">{payment.wingName} - {payment.flatNumber}</p>
+                        <p className="text-gray-600">
+                          {payment.wingName} - {payment.flatNumber}
+                        </p>
                       </div>
                     </TableCell>
                     <TableCell>{formatDate(payment.paymentDate)}</TableCell>
                     <TableCell>{payment.payerName}</TableCell>
                     <TableCell>{payment.modeOfPayment}</TableCell>
-                    <TableCell>₹{payment.amountPaid.toLocaleString()}</TableCell>
-                    <TableCell>₹{payment.agreementValue.toLocaleString()}</TableCell>
+                    <TableCell>
+                      ₹{payment.amountPaid.toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      ₹{payment.agreementValue.toLocaleString()}
+                    </TableCell>
                     <TableCell className="font-medium text-red-600">
                       ₹{payment.outstandingAmount.toLocaleString()}
                     </TableCell>
