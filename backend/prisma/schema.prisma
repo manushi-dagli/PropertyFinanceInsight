@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model bookings {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_id         String    @db.Uuid
+  flat_id             String    @db.Uuid
+  payment_date        DateTime? @db.Timestamptz(6)
+  payer_name          String?
+  mode_of_payment     String?
+  amount_paid         Decimal?  @db.Decimal
+  customer_bank_name  String?
+  customer_account_no String?   @db.VarChar
+  company_bank_name   String?
+  company_account_no  String?   @db.VarChar
+  agreement_value     Decimal?  @db.Decimal
+  booking_amount      Decimal?  @db.Decimal
+  outstanding_amount  Decimal?  @db.Decimal
+  customer            customer  @relation(fields: [customer_id], references: [id])
+  flat                flat      @relation(fields: [flat_id], references: [id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model cancellations {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_id         String    @db.Uuid
+  flat_id             String    @db.Uuid
+  refund_date         DateTime? @db.Timestamptz(6)
+  payee_name          String?
+  mode_of_payment     String?
+  amount_refunded     Decimal?  @db.Decimal
+  customer_bank_name  String?
+  customer_account_no String?   @db.VarChar
+  company_bank_name   String?
+  company_account_no  String?   @db.VarChar
+  remarks             String?
+  customer            customer  @relation(fields: [customer_id], references: [id])
+  flat                flat      @relation(fields: [flat_id], references: [id])
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model company {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime  @default(now()) @db.Timestamptz(6)
+  company_name        String
+  company_address     String?
+  email_address       String?
+  contact_number      String?   @db.VarChar
+  gst_number          String?   @db.VarChar
+  pan_number          String?   @db.VarChar
+  cin_number          String?   @db.VarChar
+  contact_person_name String?
+  is_active           Boolean   @default(true)
+  project             project[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model customer {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customer_name  String?
+  flat_id        String?         @db.Uuid
+  contact_number Decimal?        @db.Decimal
+  email          String?
+  aadhar_number  String?
+  address        String?
+  pin_code       Decimal?        @db.Decimal
+  bookings       bookings[]
+  cancellations  cancellations[]
+  flat           flat?           @relation(fields: [flat_id], references: [id], onDelete: Restrict)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model flat {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  flat_number     String          @db.VarChar
+  wing_id         String          @db.Uuid
+  carpet_area     Decimal?        @db.Decimal
+  status          String?         @db.VarChar
+  agreement_value Decimal?        @db.Decimal
+  bookings        bookings[]
+  cancellations   cancellations[]
+  customer        customer[]
+  wing            wing            @relation(fields: [wing_id], references: [id])
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model project {
+  id                            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id                    String    @db.Uuid
+  company_name                  String?
+  project_name                  String
+  total_area                    Decimal?  @db.Decimal
+  estimated_land_cost           Decimal?  @db.Decimal
+  estimated_construction_cost   Decimal?  @db.Decimal
+  total_estimated_cost          Decimal?  @db.Decimal
+  report_date                   DateTime? @db.Timestamptz(6)
+  actual_land_cost              Decimal?  @db.Decimal
+  actual_construction_cost      Decimal?  @db.Decimal
+  total_actual_cost             Decimal?  @db.Decimal
+  project_completion_percentage String?   @db.VarChar
+  construction_percentage       String?   @db.VarChar
+  revenue_recognized            Boolean?
+  company                       company   @relation(fields: [company_id], references: [id])
+  wing                          wing[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model wing {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  wing_name         String
+  project_id        String   @db.Uuid
+  project_name      String?
+  company_name      String?
+  construction_area Decimal? @db.Decimal
+  flat              flat[]
+  project           project  @relation(fields: [project_id], references: [id])
+}
