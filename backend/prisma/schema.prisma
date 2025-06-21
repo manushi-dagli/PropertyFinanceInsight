@@ -101,7 +101,6 @@ model flat {
 model project {
   id                            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   company_id                    String    @db.Uuid
-  company_name                  String?
   project_name                  String
   total_area                    Decimal?  @db.Decimal
   estimated_land_cost           Decimal?  @db.Decimal
@@ -114,6 +113,7 @@ model project {
   project_completion_percentage String?   @db.VarChar
   construction_percentage       String?   @db.VarChar
   revenue_recognized            Boolean?
+  is_active                     Boolean   @default(true)
   company                       company   @relation(fields: [company_id], references: [id])
   wing                          wing[]
 }

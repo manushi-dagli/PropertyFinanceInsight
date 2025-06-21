@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import companyRoutes from './companyRoute';
-import healthcheckRoutes from './healthcheckRoute';
+import companyRoutes from './company.routes';
+import healthcheckRoutes from './healthcheck.routes';
 
 const router = Router();
 

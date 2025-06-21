@@ -6,33 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FileText, Save, Upload, TrendingUp, Edit, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-interface ProjectData {
-  id: string;
-  companyId: string;
-  companyName: string;
-  projectName: string;
-  totalArea: number;
-  estimatedLandCost: number;
-  estimatedConstructionCost: number;
-  totalEstimatedCost: number;
-  reportDate: string;
-  actualLandCost: number;
-  actualConstructionCost: number;
-  totalActualCost: number;
-  projectCompletionPercentage: number;
-  constructionPercentage: number;
-  revenueRecognized: boolean;
-}
-
-interface Company {
-  id: string;
-  name: string;
-}
-
-interface ProjectMasterProps {
-  reportingDate: string;
-}
+import { ProjectMasterProps, ProjectData, Company } from "@/types/project.types";
 
 const ProjectMaster = ({ reportingDate }: ProjectMasterProps) => {
   const { toast } = useToast();
