@@ -44,7 +44,7 @@ const createCompanyController = async (
   return new ApiResponse(
     constants.HTTP_STATUS_CREATED,
     messages.COMPANY_CREATED_SUCCESSFULLY,
-    { response }
+    { id: response }
   ).send(res);
 };
 

@@ -49,7 +49,7 @@ const CompanyMaster = () => {
     try {
       const response = await getCompaniesListApi();
       setCompanies(response.data);
-      console.log("Companies fetched successfully:", response.data);
+      console.log("Companies fetched successfully");
     } catch (error) {
       console.error("Error fetching companies:", error);
       toast({
@@ -66,68 +66,6 @@ const CompanyMaster = () => {
       [field]: value,
     }));
   };
-
-  // const handleSave = async () => {
-  //   if (!currentCompany.companyName.trim()) {
-  //     toast({
-  //       title: "Validation Error",
-  //       description: "Company name is required",
-  //       variant: "destructive",
-  //     });
-  //     return;
-  //   }
-
-  //   try {
-  //     // Call API to create or update company
-  //     const response = await createCompanyApi(currentCompany);
-  //     console.log("Company saved successfully:", response);
-  //     toast({
-  //       title: "Success",
-  //       description: `Company created successfully for id: ${response.id}`,
-  //     });
-  //   } catch (error) {
-  //     console.error("Error saving company:", error);
-  //     toast({
-  //       title: "Error",
-  //       description: "Failed to save company. Please try again.",
-  //       variant: "destructive",
-  //     });
-  //     return;
-  //   }
-
-  //   if (editingEmailAddress) {
-  //     setCompanies((prev) =>
-  //       prev.map((company) =>
-  //         company.emailAddress === editingEmailAddress
-  //           ? { ...currentCompany }
-  //           : company
-  //       )
-  //     );
-  //     setEditingEmailAddress(null);
-  //     toast({
-  //       title: "Success",
-  //       description: "Company updated successfully",
-  //     });
-  //   } else {
-  //     const newCompany = { ...currentCompany, id: Date.now().toString() };
-  //     setCompanies((prev) => [...prev, newCompany]);
-  //     toast({
-  //       title: "Success",
-  //       description: "Company added successfully",
-  //     });
-  //   }
-
-  //   setCurrentCompany({
-  //     companyAddress: "",
-  //     companyName: "",
-  //     contactNumber: "",
-  //     contactPersonName: "",
-  //     emailAddress: "",
-  //     gstNumber: "",
-  //     panNumber: "",
-  //     cinNumber: "",
-  //   });
-  // };
 
   const handleSave = async () => {
     if (!currentCompany.companyName.trim()) {
@@ -162,7 +100,7 @@ const CompanyMaster = () => {
         const response = await createCompanyApi(currentCompany);
         const newCompany = {
           ...currentCompany,
-          id: response.id ?? Date.now().toString(),
+          id: response.data.id ?? Date.now().toString(),
         };
         setCompanies((prev) => [...prev, newCompany]);
         toast({
@@ -182,6 +120,7 @@ const CompanyMaster = () => {
 
     setEditingCompanyId(null);
     setCurrentCompany({
+      id: "",
       companyName: "",
       emailAddress: "",
       companyAddress: "",
@@ -211,6 +150,21 @@ const CompanyMaster = () => {
     try {
       const response = await deleteCompanyApi(id);
       console.log("Company deleted successfully:", response);
+      setCompanies((prev) => prev.filter((company) => company.id !== id));
+      if (editingCompanyId === id) {
+        setEditingCompanyId(null);
+        setCurrentCompany({
+          id: "",
+          companyName: "",
+          emailAddress: "",
+          companyAddress: "",
+          contactNumber: "",
+          gstNumber: "",
+          panNumber: "",
+          cinNumber: "",
+          contactPersonName: "",
+        });
+      }
       toast({
         title: "Success",
         description: "Company deleted successfully",
@@ -224,16 +178,12 @@ const CompanyMaster = () => {
       });
       return;
     }
-    setCompanies((prev) => prev.filter((company) => company.id !== id));
-    toast({
-      title: "Success",
-      description: "Company deleted successfully",
-    });
   };
 
   const handleCancel = () => {
     setEditingCompanyId(null);
     setCurrentCompany({
+      id: "",
       companyName: "",
       emailAddress: "",
       companyAddress: "",
@@ -461,8 +411,10 @@ const CompanyMaster = () => {
           <CardContent>
             <div className="space-y-4">
               {companies.map((company) => (
-                // <div key={company.id} className="p-4 border border-gray-200 rounded-lg">
-                <div key={company.emailAddress}>
+                <div
+                  key={company.id}
+                  className="p-4 border border-gray-200 rounded-lg"
+                >
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
                       <h3 className="font-medium text-gray-900">
@@ -503,6 +455,7 @@ const CompanyMaster = () => {
                       variant="outline"
                       size="sm"
                       className="flex items-center gap-1"
+                      disabled={editingCompanyId === company.id}
                     >
                       <Edit className="h-3 w-3" />
                       Edit
@@ -512,6 +465,7 @@ const CompanyMaster = () => {
                       variant="destructive"
                       size="sm"
                       className="flex items-center gap-1"
+                      disabled={editingCompanyId === company.id}
                     >
                       <Trash2 className="h-3 w-3" />
                       Delete
