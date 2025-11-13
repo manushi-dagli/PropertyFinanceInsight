@@ -40,7 +40,23 @@ const getProjectListService = async (): Promise<any> => {
 
   logger.info(`getProjectListService: Fetched ${projects.length} projects`);
 
-  return projects;
+  return projects.map((project) => ({
+    id: project.id,
+    projectName: project.project_name,
+    actualConstructionCost: project.actual_construction_cost,
+    estimatedConstructionCost: project.estimated_construction_cost,
+    actualLandCost: project.actual_land_cost,
+    estimatedLandCost: project.estimated_land_cost,
+    constructionPercentage: project.construction_percentage,
+    projectCompletionPercentage: project.project_completion_percentage,
+    reportDate: project.report_date ? project.report_date.toISOString() : null,
+    revenueRecognized: project.revenue_recognized,
+    totalActualCost: project.total_actual_cost,
+    totalEstimatedCost: project.total_estimated_cost,
+    totalArea: project.total_area,
+    companyId: project.company_id,
+    companyName: project?.company?.company_name
+  }));
 };
 
 const createProjectService = async (payload: any): Promise<string> => {

@@ -4,8 +4,8 @@ import db from "../config/prisma";
 
 const getProjectListByWhereCondition = async (
   whereCondition: Prisma.projectWhereInput,
-  selectPayload: Prisma.projectSelect
-): Promise<project[]> => {
+  selectPayload?: Prisma.projectSelect
+): Promise<Array<Partial<project & { company: { company_name: string } }>>> => {
   logger.info(
     "getProjectListByWhereCondition: Request received to fetch project list with where condition"
   );

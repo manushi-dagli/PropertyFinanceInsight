@@ -1,5 +1,5 @@
 export interface ProjectData {
-  id: string;
+  id?: string;
   companyId: string;
   companyName: string;
   projectName: string;
@@ -11,14 +11,14 @@ export interface ProjectData {
   actualLandCost: number;
   actualConstructionCost: number;
   totalActualCost: number;
-  projectCompletionPercentage: number;
-  constructionPercentage: number;
+  projectCompletionPercentage: string;
+  constructionPercentage: string;
   revenueRecognized: boolean;
 }
 
 export interface Company {
   id: string;
-  name: string;
+  companyName: string;
 }
 
 export interface ProjectMasterProps {
