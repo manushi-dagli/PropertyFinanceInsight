@@ -1,4 +1,7 @@
 import { useState, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import {
   Card,
   CardContent,
@@ -16,6 +19,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import {
   Table,
   TableBody,
@@ -39,6 +50,30 @@ import { useToast } from "@/hooks/use-toast";
 import ExcelImportDialog from "./ExcelImportDialog";
 import { exportToExcel } from "@/utils/excelUtils";
 import { EXCEL_MODULE_NAMES, EXCEL_TEMPLATES } from "@/types/excel.types";
+import {
+  createBookingApi,
+  getBookingsListApi,
+  updateBookingApi,
+  deleteBookingApi,
+} from "@/api/booking.api";
+import { getCustomersListApi } from "@/api/customer.api";
+import { mapBookingToApi, mapBookingFromApi } from "@/utils/dataMapper";
+
+const bookingSchema = z.object({
+  customerId: z.string().min(1, "Customer selection is required"),
+  flatId: z.string().min(1, "Flat selection is required"),
+  paymentDate: z.string().min(1, "Payment date is required"),
+  payerName: z.string().min(1, "Payer name is required"),
+  modeOfPayment: z.string().min(1, "Mode of payment is required"),
+  amountPaid: z.number().positive("Amount paid must be greater than 0"),
+  customerBankName: z.string().optional(),
+  customerAccountNo: z.string().optional(),
+  companyBankName: z.string().optional(),
+  companyAccountNo: z.string().optional(),
+  agreementValue: z.number().positive("Agreement value must be greater than 0"),
+  bookingAmount: z.number().min(0).default(0),
+  outstandingAmount: z.number().min(0).default(0),
+});
 
 interface Customer {
   id: string;

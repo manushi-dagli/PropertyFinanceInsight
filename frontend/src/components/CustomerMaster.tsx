@@ -1,16 +1,45 @@
 import { useState, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Users, Save, Edit, Trash2, Plus, Minus, X, RefreshCw, Upload, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ExcelImportDialog from "./ExcelImportDialog";
 import { exportToExcel } from "@/utils/excelUtils";
 import { EXCEL_TEMPLATES, EXCEL_MODULE_NAMES } from "@/types/excel.types";
+import {
+  createCustomerApi,
+  getCustomersListApi,
+  updateCustomerApi,
+  deleteCustomerApi,
+} from "@/api/customer.api";
+import { getFlatsListApi } from "@/api/flat.api";
+import { mapCustomerToApi, mapCustomerFromApi } from "@/utils/dataMapper";
+
+const customerSchema = z.object({
+  customerName: z.string().min(1, "Customer name is required"),
+  flatId: z.string().optional(),
+  contactNumber: z.string().regex(/^\d{10}$|^$/, "Contact number must be exactly 10 digits if provided").optional(),
+  email: z.union([z.string().email("Invalid email address"), z.literal("")]).optional(),
+  aadharNumber: z.string().regex(/^\d{12}$|^$/, "Aadhar number must be exactly 12 digits if provided").optional(),
+  address: z.string().optional(),
+  pinCode: z.string().regex(/^\d{6}$|^$/, "Pin code must be exactly 6 digits if provided").optional(),
+});
 
 interface CustomerData {
   id: string;
@@ -52,20 +81,6 @@ const CustomerMaster = ({ reportingDate }: { reportingDate: string }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
-  const [currentCustomer, setCurrentCustomer] = useState<CustomerData>({
-    id: "",
-    customerName: "",
-    flatId: "",
-    flatNumber: "",
-    wingName: "",
-    projectName: "",
-    companyName: "",
-    contactNumber: "",
-    email: "",
-    aadharNumber: "",
-    address: "",
-    pinCode: ""
-  });
   const [jointOwners, setJointOwners] = useState<JointOwner[]>([{
     id: Date.now().toString(),
     name: "",
@@ -77,40 +92,92 @@ const CustomerMaster = ({ reportingDate }: { reportingDate: string }) => {
   }]);
   const [showImportDialog, setShowImportDialog] = useState(false);
 
+  const form = useForm<z.infer<typeof customerSchema>>({
+    resolver: zodResolver(customerSchema),
+    defaultValues: {
+      customerName: "",
+      flatId: "",
+      contactNumber: "",
+      email: "",
+      aadharNumber: "",
+      address: "",
+      pinCode: "",
+    },
+  });
+
   useEffect(() => {
-    const savedFlats = localStorage.getItem('flats');
-    if (savedFlats) {
-      setFlats(JSON.parse(savedFlats));
-    }
+    loadFlats();
+    loadCustomers();
   }, []);
 
-  useEffect(() => {
-    const savedCustomers = localStorage.getItem('customers');
-    if (savedCustomers) {
-      setCustomers(JSON.parse(savedCustomers));
+  const loadFlats = async () => {
+    try {
+      const data = await getFlatsListApi();
+      // Need to join with wings to get full details
+      const { getWingsListApi } = await import("@/api/wing.api");
+      const wingsData = await getWingsListApi();
+      
+      const mappedFlats = (data || []).map((flat: any) => {
+        const wing = wingsData.find((w: any) => w.id === flat.wing_id);
+        return {
+          id: flat.id,
+          flatNumber: flat.flat_number,
+          wingName: wing?.wing_name || "",
+          projectName: wing?.project_name || "",
+          companyName: wing?.company_name || "",
+        };
+      });
+      setFlats(mappedFlats);
+    } catch (error) {
+      console.error("Error loading flats:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load flats",
+        variant: "destructive",
+      });
     }
-  }, []);
+  };
 
-  useEffect(() => {
-    localStorage.setItem('customers', JSON.stringify(customers));
-  }, [customers]);
-
-  useEffect(() => {
-    const selectedFlatId = localStorage.getItem('selectedFlatForCustomer');
-    if (selectedFlatId) {
-      const selectedFlat = flats.find(flat => flat.id === selectedFlatId);
-      if (selectedFlat) {
-        setCurrentCustomer(prev => ({
-          ...prev,
-          flatId: selectedFlat.id,
-          flatNumber: selectedFlat.flatNumber,
-          wingName: selectedFlat.wingName,
-          projectName: selectedFlat.projectName,
-          companyName: selectedFlat.companyName
-        }));
-      }
+  const loadCustomers = async () => {
+    try {
+      const data = await getCustomersListApi();
+      // Need to join with flats to get flat details
+      const mappedCustomers = await Promise.all(
+        (data || []).map(async (customer: any) => {
+          const flat = flats.find(f => f.id === customer.flat_id);
+          return {
+            id: customer.id,
+            customerName: customer.customer_name || "",
+            flatId: customer.flat_id || "",
+            flatNumber: flat?.flatNumber || "",
+            wingName: flat?.wingName || "",
+            projectName: flat?.projectName || "",
+            companyName: flat?.companyName || "",
+            contactNumber: customer.contact_number?.toString() || "",
+            email: customer.email || "",
+            aadharNumber: customer.aadhar_number || "",
+            address: customer.address || "",
+            pinCode: customer.pin_code?.toString() || "",
+          };
+        })
+      );
+      setCustomers(mappedCustomers);
+    } catch (error) {
+      console.error("Error loading customers:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load customers",
+        variant: "destructive",
+      });
     }
-  }, [flats]);
+  };
+
+  // Reload customers when flats are loaded
+  useEffect(() => {
+    if (flats.length > 0) {
+      loadCustomers();
+    }
+  }, [flats.length]);
 
   const handleSelectAll = (checked: boolean) => {
     setSelectAll(checked);
@@ -130,7 +197,7 @@ const CustomerMaster = ({ reportingDate }: { reportingDate: string }) => {
     }
   };
 
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = async () => {
     if (selectedCustomers.length === 0) {
       toast({
         title: "No Selection",
@@ -140,17 +207,26 @@ const CustomerMaster = ({ reportingDate }: { reportingDate: string }) => {
       return;
     }
 
-    setCustomers(prev => prev.filter(customer => !selectedCustomers.includes(customer.id)));
-    setSelectedCustomers([]);
-    setSelectAll(false);
-    
-    toast({
-      title: "Success",
-      description: `${selectedCustomers.length} customer(s) deleted successfully`
-    });
+    try {
+      await Promise.all(selectedCustomers.map(id => deleteCustomerApi(id)));
+      setCustomers(prev => prev.filter(customer => !selectedCustomers.includes(customer.id)));
+      setSelectedCustomers([]);
+      setSelectAll(false);
+      toast({
+        title: "Success",
+        description: `${selectedCustomers.length} customer(s) deleted successfully`
+      });
+    } catch (error) {
+      console.error("Error deleting customers:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete some customers. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleDeleteAll = () => {
+  const handleDeleteAll = async () => {
     if (customers.length === 0) {
       toast({
         title: "No Data",
@@ -160,36 +236,25 @@ const CustomerMaster = ({ reportingDate }: { reportingDate: string }) => {
       return;
     }
 
-    setCustomers([]);
-    setSelectedCustomers([]);
-    setSelectAll(false);
-    
-    toast({
-      title: "Success",
-      description: "All customers deleted successfully"
-    });
-  };
-
-  const handleInputChange = (field: keyof CustomerData, value: string) => {
-    setCurrentCustomer(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  const handleFlatChange = (flatId: string) => {
-    const selectedFlat = flats.find(flat => flat.id === flatId);
-    if (selectedFlat) {
-      setCurrentCustomer(prev => ({
-        ...prev,
-        flatId,
-        flatNumber: selectedFlat.flatNumber,
-        wingName: selectedFlat.wingName,
-        projectName: selectedFlat.projectName,
-        companyName: selectedFlat.companyName
-      }));
+    try {
+      await Promise.all(customers.map(customer => deleteCustomerApi(customer.id)));
+      setCustomers([]);
+      setSelectedCustomers([]);
+      setSelectAll(false);
+      toast({
+        title: "Success",
+        description: "All customers deleted successfully"
+      });
+    } catch (error) {
+      console.error("Error deleting all customers:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete all customers. Please try again.",
+        variant: "destructive",
+      });
     }
   };
+
 
   const handleAddJointOwner = () => {
     setJointOwners(prev => [...prev, {
@@ -231,38 +296,8 @@ const CustomerMaster = ({ reportingDate }: { reportingDate: string }) => {
     return { available: true, message: "" };
   };
 
-  const handleSave = () => {
-    if (!currentCustomer.customerName.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Customer name is required",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (currentCustomer.flatId) {
-      const flatAvailability = checkFlatAvailability(currentCustomer.flatId, editingId || undefined);
-      if (!flatAvailability.available) {
-        toast({
-          title: "Flat Availability Error",
-          description: flatAvailability.message,
-          variant: "destructive"
-        });
-        return;
-      }
-
-      const selectedFlat = flats.find(flat => flat.id === currentCustomer.flatId);
-      if (!selectedFlat) {
-        toast({
-          title: "Validation Error",
-          description: "Please select a valid flat number",
-          variant: "destructive"
-        });
-        return;
-      }
-    }
-
+  const handleSave = async (values: z.infer<typeof customerSchema>) => {
+    // Validate joint owners
     for (let i = 0; i < jointOwners.length; i++) {
       const owner = jointOwners[i];
       if (!owner.name.trim()) {
@@ -273,37 +308,6 @@ const CustomerMaster = ({ reportingDate }: { reportingDate: string }) => {
         });
         return;
       }
-    }
-
-    if (currentCustomer.contactNumber && !/^\d{10}$/.test(currentCustomer.contactNumber)) {
-      toast({
-        title: "Validation Error",
-        description: "Contact Number must be exactly 10 digits if provided",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (currentCustomer.aadharNumber && !/^\d{12}$/.test(currentCustomer.aadharNumber)) {
-      toast({
-        title: "Validation Error",
-        description: "Aadhar Number must be exactly 12 digits if provided",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (currentCustomer.pinCode && !/^\d{6}$/.test(currentCustomer.pinCode)) {
-      toast({
-        title: "Validation Error",
-        description: "Pin Code must be exactly 6 digits if provided",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    for (let i = 0; i < jointOwners.length; i++) {
-      const owner = jointOwners[i];
       
       if (owner.contactNumber && !/^\d{10}$/.test(owner.contactNumber)) {
         toast({
@@ -333,77 +337,151 @@ const CustomerMaster = ({ reportingDate }: { reportingDate: string }) => {
       }
     }
 
-    if (editingId) {
-      setCustomers(prev => prev.map(customer => 
-        customer.id === editingId ? { ...currentCustomer, id: editingId } : customer
-      ));
-      setEditingId(null);
-      toast({
-        title: "Success",
-        description: "Customer updated successfully"
-      });
-    } else {
-      const newCustomer = { ...currentCustomer, id: Date.now().toString() };
-      setCustomers(prev => [...prev, newCustomer]);
-      toast({
-        title: "Success",
-        description: "Customer added successfully"
-      });
+    if (values.flatId) {
+      const flatAvailability = checkFlatAvailability(values.flatId, editingId || undefined);
+      if (!flatAvailability.available) {
+        toast({
+          title: "Flat Availability Error",
+          description: flatAvailability.message,
+          variant: "destructive"
+        });
+        return;
+      }
     }
 
-    setCurrentCustomer({
-      id: "",
-      customerName: "",
-      flatId: "",
-      flatNumber: "",
-      wingName: "",
-      projectName: "",
-      companyName: "",
-      contactNumber: "",
-      email: "",
-      aadharNumber: "",
-      address: "",
-      pinCode: ""
-    });
-    setJointOwners([{
-      id: Date.now().toString(),
-      name: "",
-      contactNumber: "",
-      email: "",
-      aadharNumber: "",
-      address: "",
-      pinCode: ""
-    }]);
+    try {
+      const apiData = mapCustomerToApi({
+        customerName: values.customerName,
+        flatId: values.flatId,
+        contactNumber: values.contactNumber,
+        email: values.email,
+        aadharNumber: values.aadharNumber,
+        address: values.address,
+        pinCode: values.pinCode,
+      });
+
+      if (editingId) {
+        const response = await updateCustomerApi(apiData, editingId);
+        const selectedFlat = flats.find(f => f.id === values.flatId);
+        const updatedCustomer: CustomerData = {
+          id: response.id,
+          customerName: response.customer_name || "",
+          flatId: response.flat_id || "",
+          flatNumber: selectedFlat?.flatNumber || "",
+          wingName: selectedFlat?.wingName || "",
+          projectName: selectedFlat?.projectName || "",
+          companyName: selectedFlat?.companyName || "",
+          contactNumber: response.contact_number?.toString() || "",
+          email: response.email || "",
+          aadharNumber: response.aadhar_number || "",
+          address: response.address || "",
+          pinCode: response.pin_code?.toString() || "",
+        };
+        setCustomers(prev => prev.map(customer => 
+          customer.id === editingId ? updatedCustomer : customer
+        ));
+        toast({
+          title: "Success",
+          description: "Customer updated successfully"
+        });
+      } else {
+        const response = await createCustomerApi(apiData);
+        const selectedFlat = flats.find(f => f.id === values.flatId);
+        const newCustomer: CustomerData = {
+          id: response.id,
+          customerName: response.customer_name || "",
+          flatId: response.flat_id || "",
+          flatNumber: selectedFlat?.flatNumber || "",
+          wingName: selectedFlat?.wingName || "",
+          projectName: selectedFlat?.projectName || "",
+          companyName: selectedFlat?.companyName || "",
+          contactNumber: response.contact_number?.toString() || "",
+          email: response.email || "",
+          aadharNumber: response.aadhar_number || "",
+          address: response.address || "",
+          pinCode: response.pin_code?.toString() || "",
+        };
+        setCustomers(prev => [...prev, newCustomer]);
+        toast({
+          title: "Success",
+          description: "Customer added successfully"
+        });
+      }
+
+      setEditingId(null);
+      form.reset({
+        customerName: "",
+        flatId: "",
+        contactNumber: "",
+        email: "",
+        aadharNumber: "",
+        address: "",
+        pinCode: "",
+      });
+      setJointOwners([{
+        id: Date.now().toString(),
+        name: "",
+        contactNumber: "",
+        email: "",
+        aadharNumber: "",
+        address: "",
+        pinCode: ""
+      }]);
+    } catch (error) {
+      console.error("Error saving customer:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save customer. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleEdit = (customer: CustomerData) => {
-    setCurrentCustomer(customer);
     setEditingId(customer.id);
+    form.reset({
+      customerName: customer.customerName,
+      flatId: customer.flatId,
+      contactNumber: customer.contactNumber,
+      email: customer.email,
+      aadharNumber: customer.aadharNumber,
+      address: customer.address,
+      pinCode: customer.pinCode,
+    });
   };
 
-  const handleDelete = (id: string) => {
-    setCustomers(prev => prev.filter(customer => customer.id !== id));
-    toast({
-      title: "Success",
-      description: "Customer deleted successfully"
-    });
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteCustomerApi(id);
+      setCustomers(prev => prev.filter(customer => customer.id !== id));
+      if (editingId === id) {
+        setEditingId(null);
+        form.reset();
+      }
+      toast({
+        title: "Success",
+        description: "Customer deleted successfully"
+      });
+    } catch (error) {
+      console.error("Error deleting customer:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete customer. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleCancel = () => {
     setEditingId(null);
-    setCurrentCustomer({
-      id: "",
+    form.reset({
       customerName: "",
       flatId: "",
-      flatNumber: "",
-      wingName: "",
-      projectName: "",
-      companyName: "",
       contactNumber: "",
       email: "",
       aadharNumber: "",
       address: "",
-      pinCode: ""
+      pinCode: "",
     });
     setJointOwners([{
       id: Date.now().toString(),
@@ -598,104 +676,141 @@ const handleImport = (data: any[]) => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="space-y-4">
-              <h3 className="font-medium text-gray-900 border-b pb-2">Basic Information</h3>
-              
-              <div>
-                <Label htmlFor="customer-name">Customer Name *</Label>
-                <Input
-                  id="customer-name"
-                  value={currentCustomer.customerName}
-                  onChange={(e) => handleInputChange("customerName", e.target.value)}
-                  placeholder="e.g., John Doe"
-                />
-              </div>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(handleSave)} className="space-y-6">
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-4">
+                  <h3 className="font-medium text-gray-900 border-b pb-2">Basic Information</h3>
+                  
+                  <FormField
+                    control={form.control}
+                    name="customerName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Customer Name *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., John Doe" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <div>
-                <Label htmlFor="flat-select">Flat Number *</Label>
-                <Select value={currentCustomer.flatId} onValueChange={handleFlatChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a flat" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {flats.map((flat) => (
-                      <SelectItem key={flat.id} value={flat.id}>
-                        {flat.companyName} - {flat.projectName} - {flat.wingName} - {flat.flatNumber}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                  <FormField
+                    control={form.control}
+                    name="flatId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Flat Number</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a flat" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {flats.map((flat) => (
+                              <SelectItem key={flat.id} value={flat.id}>
+                                {flat.companyName} - {flat.projectName} - {flat.wingName} - {flat.flatNumber}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              {currentCustomer.flatId && (
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <h4 className="font-medium text-gray-900">Selected Flat Details</h4>
-                  <div className="text-sm text-gray-600 mt-1">
-                    <p>Company: {currentCustomer.companyName}</p>
-                    <p>Project: {currentCustomer.projectName}</p>
-                    <p>Wing: {currentCustomer.wingName}</p>
-                    <p>Flat: {currentCustomer.flatNumber}</p>
-                  </div>
+                  {form.watch("flatId") && (() => {
+                    const selectedFlat = flats.find(f => f.id === form.watch("flatId"));
+                    return selectedFlat ? (
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <h4 className="font-medium text-gray-900">Selected Flat Details</h4>
+                        <div className="text-sm text-gray-600 mt-1">
+                          <p>Company: {selectedFlat.companyName}</p>
+                          <p>Project: {selectedFlat.projectName}</p>
+                          <p>Wing: {selectedFlat.wingName}</p>
+                          <p>Flat: {selectedFlat.flatNumber}</p>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+
+                  <FormField
+                    control={form.control}
+                    name="contactNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Contact Number</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., 9876543210" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="e.g., john.doe@example.com" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="aadharNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Aadhar Number</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., 123456789012" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
-              )}
 
-              <div>
-                <Label htmlFor="contact-number">Contact Number</Label>
-                <Input
-                  id="contact-number"
-                  value={currentCustomer.contactNumber}
-                  onChange={(e) => handleInputChange("contactNumber", e.target.value)}
-                  placeholder="e.g., 9876543210"
-                />
-              </div>
+                <div className="space-y-4">
+                  <h3 className="font-medium text-gray-900 border-b pb-2">Address Details</h3>
+                  
+                  <FormField
+                    control={form.control}
+                    name="address"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Address</FormLabel>
+                        <FormControl>
+                          <Textarea placeholder="Enter address" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={currentCustomer.email}
-                  onChange={(e) => handleInputChange("email", e.target.value)}
-                  placeholder="e.g., john.doe@example.com"
-                />
+                  <FormField
+                    control={form.control}
+                    name="pinCode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Pin Code</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., 400001" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </div>
-
-              <div>
-                <Label htmlFor="aadhar-number">Aadhar Number</Label>
-                <Input
-                  id="aadhar-number"
-                  value={currentCustomer.aadharNumber}
-                  onChange={(e) => handleInputChange("aadharNumber", e.target.value)}
-                  placeholder="e.g., 123456789012"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <h3 className="font-medium text-gray-900 border-b pb-2">Address Details</h3>
-              
-              <div>
-                <Label htmlFor="address">Address</Label>
-                <Textarea
-                  id="address"
-                  value={currentCustomer.address}
-                  onChange={(e) => handleInputChange("address", e.target.value)}
-                  placeholder="Enter address"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="pin-code">Pin Code</Label>
-                <Input
-                  id="pin-code"
-                  value={currentCustomer.pinCode}
-                  onChange={(e) => handleInputChange("pinCode", e.target.value)}
-                  placeholder="e.g., 400001"
-                />
-              </div>
-            </div>
-          </div>
 
           <div className="space-y-4">
             <h3 className="font-medium text-gray-900 border-b pb-2">
@@ -776,17 +891,19 @@ const handleImport = (data: any[]) => {
             ))}
           </div>
 
-          <div className="flex justify-end gap-3">
-            {editingId && (
-              <Button onClick={handleCancel} variant="outline">
-                Cancel
-              </Button>
-            )}
-            <Button onClick={handleSave} className="flex items-center gap-2">
-              <Save className="h-4 w-4" />
-              {editingId ? "Update Customer" : "Save Customer"}
-            </Button>
-          </div>
+              <div className="flex justify-end gap-3">
+                {editingId && (
+                  <Button type="button" onClick={handleCancel} variant="outline">
+                    Cancel
+                  </Button>
+                )}
+                <Button type="submit" className="flex items-center gap-2">
+                  <Save className="h-4 w-4" />
+                  {editingId ? "Update Customer" : "Save Customer"}
+                </Button>
+              </div>
+            </form>
+          </Form>
         </CardContent>
       </Card>
 

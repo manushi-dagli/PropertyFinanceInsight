@@ -1,4 +1,7 @@
 import { useState, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import {
   Card,
   CardContent,
@@ -7,9 +10,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Building2, Save, FileText, Upload, Edit, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { exportToExcel, } from "@/utils/excelUtils";
@@ -23,22 +33,39 @@ import {
 import { CompanyData } from "@/types/company.types";
 import { EXCEL_MODULE_NAMES, EXCEL_TEMPLATES } from "@/types/excel.types";
 
+const companySchema = z.object({
+  companyName: z.string().min(1, "Company name is required"),
+  emailAddress: z
+    .union([z.string().email("Invalid email address"), z.literal("")])
+    .optional(),
+  companyAddress: z.string().optional(),
+  contactNumber: z.string().optional(),
+  gstNumber: z.string().optional(),
+  panNumber: z.string().optional(),
+  cinNumber: z.string().optional(),
+  contactPersonName: z.string().optional(),
+});
+
+type CompanyFormValues = z.infer<typeof companySchema>;
+
 const CompanyMaster = () => {
   const { toast } = useToast();
   const [companies, setCompanies] = useState<CompanyData[]>([]);
   const [editingCompanyId, setEditingCompanyId] = useState<string | null>(null);
-
   const [showImportDialog, setShowImportDialog] = useState(false);
-  const [currentCompany, setCurrentCompany] = useState<CompanyData>({
-    id: "",
-    companyName: "",
-    emailAddress: "",
-    companyAddress: "",
-    contactNumber: "",
-    gstNumber: "",
-    panNumber: "",
-    cinNumber: "",
-    contactPersonName: "",
+
+  const form = useForm<CompanyFormValues>({
+    resolver: zodResolver(companySchema),
+    defaultValues: {
+      companyName: "",
+      emailAddress: "",
+      companyAddress: "",
+      contactNumber: "",
+      gstNumber: "",
+      panNumber: "",
+      cinNumber: "",
+      contactPersonName: "",
+    },
   });
 
   // Get companies from backend on component mount
@@ -48,8 +75,20 @@ const CompanyMaster = () => {
 
   const getCompaniesList = async () => {
     try {
-      const response = await getCompaniesListApi();
-      setCompanies(response.data);
+      const data = await getCompaniesListApi();
+      // Map database column names (snake_case) to frontend types (camelCase)
+      const mappedData = (data || []).map((company: any) => ({
+        id: company.id,
+        companyName: company.company_name,
+        emailAddress: company.email_address,
+        companyAddress: company.company_address,
+        contactNumber: company.contact_number,
+        gstNumber: company.gst_number,
+        panNumber: company.pan_number,
+        cinNumber: company.cin_number,
+        contactPersonName: company.contact_person_name,
+      }));
+      setCompanies(mappedData);
       console.log("Companies fetched successfully");
     } catch (error) {
       console.error("Error fetching companies:", error);
@@ -61,35 +100,36 @@ const CompanyMaster = () => {
     }
   };
 
-  const handleInputChange = (field: keyof CompanyData, value: string) => {
-    setCurrentCompany((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
-
-  const handleSave = async () => {
-    if (!currentCompany.companyName.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Company name is required",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  const onSubmit = async (values: CompanyFormValues) => {
     try {
       if (editingCompanyId) {
-        const { id: editingCompanyId, ...updatePayload } = currentCompany;
-        const response = await updateCompanyApi(
-          // rmeove id from currentCompany
-          updatePayload,
-          editingCompanyId
-        );
-        console.log("Company updated successfully:", response);
+        // Map frontend camelCase to database snake_case
+        const updatePayload = {
+          company_name: values.companyName,
+          email_address: values.emailAddress || undefined,
+          company_address: values.companyAddress || undefined,
+          contact_number: values.contactNumber || undefined,
+          gst_number: values.gstNumber || undefined,
+          pan_number: values.panNumber || undefined,
+          cin_number: values.cinNumber || undefined,
+          contact_person_name: values.contactPersonName || undefined,
+        };
+        const response = await updateCompanyApi(updatePayload, editingCompanyId);
+        // Map response back to camelCase
+        const updatedCompany = {
+          id: response.id,
+          companyName: response.company_name,
+          emailAddress: response.email_address || "",
+          companyAddress: response.company_address || "",
+          contactNumber: response.contact_number || "",
+          gstNumber: response.gst_number || "",
+          panNumber: response.pan_number || "",
+          cinNumber: response.cin_number || "",
+          contactPersonName: response.contact_person_name || "",
+        };
         setCompanies((prev) =>
           prev.map((company) =>
-            company.id === editingCompanyId ? currentCompany : company
+            company.id === editingCompanyId ? updatedCompany : company
           )
         );
         toast({
@@ -97,11 +137,29 @@ const CompanyMaster = () => {
           description: "Company updated successfully",
         });
       } else {
-        // Create
-        const response = await createCompanyApi(currentCompany);
+        // Map frontend camelCase to database snake_case
+        const createPayload = {
+          company_name: values.companyName,
+          email_address: values.emailAddress || undefined,
+          company_address: values.companyAddress || undefined,
+          contact_number: values.contactNumber || undefined,
+          gst_number: values.gstNumber || undefined,
+          pan_number: values.panNumber || undefined,
+          cin_number: values.cinNumber || undefined,
+          contact_person_name: values.contactPersonName || undefined,
+        };
+        const response = await createCompanyApi(createPayload);
+        // Map response back to camelCase
         const newCompany = {
-          ...currentCompany,
-          id: response.data.id ?? Date.now().toString(),
+          id: response.id,
+          companyName: response.company_name,
+          emailAddress: response.email_address || "",
+          companyAddress: response.company_address || "",
+          contactNumber: response.contact_number || "",
+          gstNumber: response.gst_number || "",
+          panNumber: response.pan_number || "",
+          cinNumber: response.cin_number || "",
+          contactPersonName: response.contact_person_name || "",
         };
         setCompanies((prev) => [...prev, newCompany]);
         toast({
@@ -120,22 +178,21 @@ const CompanyMaster = () => {
     }
 
     setEditingCompanyId(null);
-    setCurrentCompany({
-      id: "",
-      companyName: "",
-      emailAddress: "",
-      companyAddress: "",
-      contactNumber: "",
-      gstNumber: "",
-      panNumber: "",
-      cinNumber: "",
-      contactPersonName: "",
-    });
+    form.reset();
   };
 
   const handleEdit = (company: CompanyData) => {
-    setEditingCompanyId(company?.id);
-    setCurrentCompany(company);
+    setEditingCompanyId(company?.id || null);
+    form.reset({
+      companyName: company.companyName || "",
+      emailAddress: company.emailAddress || "",
+      companyAddress: company.companyAddress || "",
+      contactNumber: company.contactNumber || "",
+      gstNumber: company.gstNumber || "",
+      panNumber: company.panNumber || "",
+      cinNumber: company.cinNumber || "",
+      contactPersonName: company.contactPersonName || "",
+    });
   };
 
   const handleDelete = async (id: string) => {
@@ -154,17 +211,7 @@ const CompanyMaster = () => {
       setCompanies((prev) => prev.filter((company) => company.id !== id));
       if (editingCompanyId === id) {
         setEditingCompanyId(null);
-        setCurrentCompany({
-          id: "",
-          companyName: "",
-          emailAddress: "",
-          companyAddress: "",
-          contactNumber: "",
-          gstNumber: "",
-          panNumber: "",
-          cinNumber: "",
-          contactPersonName: "",
-        });
+        form.reset();
       }
       toast({
         title: "Success",
@@ -183,17 +230,7 @@ const CompanyMaster = () => {
 
   const handleCancel = () => {
     setEditingCompanyId(null);
-    setCurrentCompany({
-      id: "",
-      companyName: "",
-      emailAddress: "",
-      companyAddress: "",
-      contactNumber: "",
-      gstNumber: "",
-      panNumber: "",
-      cinNumber: "",
-      contactPersonName: "",
-    });
+    form.reset();
   };
 
   const handleExcelImport = (data: CompanyData[]) => {
@@ -272,131 +309,179 @@ const CompanyMaster = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* Basic Information */}
-            <div className="space-y-4">
-              <h3 className="font-medium text-gray-900 border-b pb-2">
-                Basic Information
-              </h3>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid gap-6 md:grid-cols-2">
+                {/* Basic Information */}
+                <div className="space-y-4">
+                  <h3 className="font-medium text-gray-900 border-b pb-2">
+                    Basic Information
+                  </h3>
 
-              <div>
-                <Label htmlFor="company-name">Company Name *</Label>
-                <Input
-                  id="company-name"
-                  value={currentCompany.companyName}
-                  onChange={(e) =>
-                    handleInputChange("companyName", e.target.value)
-                  }
-                  placeholder="Enter company name"
-                />
+                  <FormField
+                    control={form.control}
+                    name="companyName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Company Name *</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Enter company name"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="cinNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>CIN</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Enter CIN number"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="contactPersonName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Contact Person</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Enter contact person name"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="companyAddress"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Address</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Enter complete address"
+                            rows={3}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="emailAddress"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email ID</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="email"
+                            placeholder="company@example.com"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="contactNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Contact Number</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Enter contact number"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Statutory Information */}
+                <div className="space-y-4">
+                  <h3 className="font-medium text-gray-900 border-b pb-2">
+                    Statutory Information
+                  </h3>
+
+                  <FormField
+                    control={form.control}
+                    name="gstNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>GSTIN</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Enter GSTIN number"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="panNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>PAN</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Enter PAN number"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </div>
 
-              <div>
-                <Label htmlFor="cin">CIN</Label>
-                <Input
-                  id="cin"
-                  value={currentCompany.cinNumber}
-                  onChange={(e) =>
-                    handleInputChange("cinNumber", e.target.value)
-                  }
-                  placeholder="Enter CIN number"
-                />
+              <div className="flex justify-end gap-3">
+                {editingCompanyId && (
+                  <Button
+                    type="button"
+                    onClick={handleCancel}
+                    variant="outline"
+                  >
+                    Cancel
+                  </Button>
+                )}
+                <Button type="submit" className="flex items-center gap-2">
+                  <Save className="h-4 w-4" />
+                  {editingCompanyId ? "Update Company" : "Save Company"}
+                </Button>
               </div>
-
-              <div>
-                <Label htmlFor="contact-person">Contact Person</Label>
-                <Input
-                  id="contact-person"
-                  value={currentCompany.contactPersonName}
-                  onChange={(e) =>
-                    handleInputChange("contactPersonName", e.target.value)
-                  }
-                  placeholder="Enter contact person name"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="address">Address</Label>
-                <Textarea
-                  id="address"
-                  value={currentCompany.companyAddress}
-                  onChange={(e) =>
-                    handleInputChange("companyAddress", e.target.value)
-                  }
-                  placeholder="Enter complete address"
-                  rows={3}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="email">Email ID</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={currentCompany.emailAddress}
-                  onChange={(e) =>
-                    handleInputChange("emailAddress", e.target.value)
-                  }
-                  placeholder="company@example.com"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="contact">Contact Number</Label>
-                <Input
-                  id="contact"
-                  value={currentCompany.contactNumber}
-                  onChange={(e) =>
-                    handleInputChange("contactNumber", e.target.value)
-                  }
-                  placeholder="Enter contact number"
-                />
-              </div>
-            </div>
-
-            {/* Statutory Information */}
-            <div className="space-y-4">
-              <h3 className="font-medium text-gray-900 border-b pb-2">
-                Statutory Information
-              </h3>
-
-              <div>
-                <Label htmlFor="gstn">GSTIN</Label>
-                <Input
-                  id="gstn"
-                  value={currentCompany.gstNumber}
-                  onChange={(e) =>
-                    handleInputChange("gstNumber", e.target.value)
-                  }
-                  placeholder="Enter GSTIN number"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="pan">PAN</Label>
-                <Input
-                  id="pan"
-                  value={currentCompany.panNumber}
-                  onChange={(e) =>
-                    handleInputChange("panNumber", e.target.value)
-                  }
-                  placeholder="Enter PAN number"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3">
-            {editingCompanyId && (
-              <Button onClick={handleCancel} variant="outline">
-                Cancel
-              </Button>
-            )}
-            <Button onClick={handleSave} className="flex items-center gap-2">
-              <Save className="h-4 w-4" />
-              {editingCompanyId ? "Update Company" : "Save Company"}
-            </Button>
-          </div>
+            </form>
+          </Form>
         </CardContent>
       </Card>
 

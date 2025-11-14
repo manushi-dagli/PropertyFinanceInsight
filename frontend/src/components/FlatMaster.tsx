@@ -1,4 +1,7 @@
 import { useState, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import {
   Card,
   CardContent,
@@ -16,6 +19,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Building,
@@ -31,6 +42,22 @@ import { useToast } from "@/hooks/use-toast";
 import ExcelImportDialog from "./ExcelImportDialog";
 import { exportToExcel } from "@/utils/excelUtils";
 import { EXCEL_MODULE_NAMES, EXCEL_TEMPLATES } from "@/types/excel.types";
+import {
+  createFlatApi,
+  getFlatsListApi,
+  updateFlatApi,
+  deleteFlatApi,
+} from "@/api/flat.api";
+import { getWingsListApi } from "@/api/wing.api";
+import { mapFlatToApi, mapFlatFromApi, mapWingFromApi } from "@/utils/dataMapper";
+
+const flatSchema = z.object({
+  flatNumber: z.string().min(1, "Flat number is required"),
+  wingId: z.string().min(1, "Wing selection is required"),
+  carpetArea: z.number().positive("Carpet area must be greater than 0"),
+  status: z.string().optional(),
+  agreementValue: z.number().min(0).default(0),
+});
 
 interface FlatData {
   id: string;
@@ -65,42 +92,82 @@ const FlatMaster = ({ reportingDate }: { reportingDate: string }) => {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [selectedFlats, setSelectedFlats] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [currentFlat, setCurrentFlat] = useState<FlatData>({
-    id: "",
-    flatNumber: "",
-    wingId: "",
-    wingName: "",
-    projectName: "",
-    companyName: "",
-    carpetArea: 0,
-    status: "Available",
-    agreementValue: 0,
+
+  const form = useForm<z.infer<typeof flatSchema>>({
+    resolver: zodResolver(flatSchema),
+    defaultValues: {
+      flatNumber: "",
+      wingId: "",
+      carpetArea: 0,
+      status: "Available",
+      agreementValue: 0,
+    },
   });
 
   useEffect(() => {
-    const savedWings = localStorage.getItem("wings");
-    if (savedWings) {
-      const wingsData = JSON.parse(savedWings);
-      setWings(wingsData);
-    }
-
-    const savedCompanies = localStorage.getItem("companies");
-    if (savedCompanies) {
-      setCompanies(JSON.parse(savedCompanies));
-    }
+    loadWings();
+    loadFlats();
   }, []);
 
-  useEffect(() => {
-    const savedFlats = localStorage.getItem("flats");
-    if (savedFlats) {
-      setFlats(JSON.parse(savedFlats));
+  const loadWings = async () => {
+    try {
+      const data = await getWingsListApi();
+      const mappedWings = (data || []).map((wing: any) => ({
+        id: wing.id,
+        wingName: wing.wing_name,
+        projectId: wing.project_id,
+        projectName: wing.project_name || "",
+        companyName: wing.company_name || "",
+        constructionArea: Number(wing.construction_area) || 0,
+      }));
+      setWings(mappedWings);
+    } catch (error) {
+      console.error("Error loading wings:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load wings",
+        variant: "destructive",
+      });
     }
-  }, []);
+  };
 
+  const loadFlats = async () => {
+    try {
+      const data = await getFlatsListApi();
+      // Need to join with wings to get wing details
+      const mappedFlats = await Promise.all(
+        (data || []).map(async (flat: any) => {
+          const wing = wings.find((w) => w.id === flat.wing_id);
+          return {
+            id: flat.id,
+            flatNumber: flat.flat_number,
+            wingId: flat.wing_id,
+            wingName: wing?.wingName || "",
+            projectName: wing?.projectName || "",
+            companyName: wing?.companyName || "",
+            carpetArea: Number(flat.carpet_area) || 0,
+            status: flat.status || "Available",
+            agreementValue: Number(flat.agreement_value) || 0,
+          };
+        })
+      );
+      setFlats(mappedFlats);
+    } catch (error) {
+      console.error("Error loading flats:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load flats",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Reload flats when wings are loaded
   useEffect(() => {
-    localStorage.setItem("flats", JSON.stringify(flats));
-  }, [flats]);
+    if (wings.length > 0) {
+      loadFlats();
+    }
+  }, [wings.length]);
 
   const handleSelectAll = (checked: boolean) => {
     setSelectAll(checked);
@@ -120,7 +187,7 @@ const FlatMaster = ({ reportingDate }: { reportingDate: string }) => {
     }
   };
 
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = async () => {
     if (selectedFlats.length === 0) {
       toast({
         title: "No Selection",
@@ -130,17 +197,26 @@ const FlatMaster = ({ reportingDate }: { reportingDate: string }) => {
       return;
     }
 
-    setFlats((prev) => prev.filter((flat) => !selectedFlats.includes(flat.id)));
-    setSelectedFlats([]);
-    setSelectAll(false);
-
-    toast({
-      title: "Success",
-      description: `${selectedFlats.length} flat(s) deleted successfully`,
-    });
+    try {
+      await Promise.all(selectedFlats.map((id) => deleteFlatApi(id)));
+      setFlats((prev) => prev.filter((flat) => !selectedFlats.includes(flat.id)));
+      setSelectedFlats([]);
+      setSelectAll(false);
+      toast({
+        title: "Success",
+        description: `${selectedFlats.length} flat(s) deleted successfully`,
+      });
+    } catch (error) {
+      console.error("Error deleting flats:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete some flats. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleDeleteAll = () => {
+  const handleDeleteAll = async () => {
     if (flats.length === 0) {
       toast({
         title: "No Data",
@@ -150,14 +226,23 @@ const FlatMaster = ({ reportingDate }: { reportingDate: string }) => {
       return;
     }
 
-    setFlats([]);
-    setSelectedFlats([]);
-    setSelectAll(false);
-
-    toast({
-      title: "Success",
-      description: "All flats deleted successfully",
-    });
+    try {
+      await Promise.all(flats.map(flat => deleteFlatApi(flat.id)));
+      setFlats([]);
+      setSelectedFlats([]);
+      setSelectAll(false);
+      toast({
+        title: "Success",
+        description: "All flats deleted successfully",
+      });
+    } catch (error) {
+      console.error("Error deleting all flats:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete all flats. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleExcelExport = () => {
@@ -191,7 +276,7 @@ const FlatMaster = ({ reportingDate }: { reportingDate: string }) => {
     });
   };
 
-  const handleExcelImport = (data: any[]) => {
+  const handleExcelImport = async (data: any[]) => {
     const importedFlats = data.map((row, index) => {
       const flatNumber = row[0]?.toString() || "";
       const wingName = row[1]?.toString() || "";
@@ -215,7 +300,6 @@ const FlatMaster = ({ reportingDate }: { reportingDate: string }) => {
         );
       }
       return {
-        id: Date.now().toString() + index,
         flatNumber,
         wingId: selectedWing?.id || "",
         wingName: selectedWing?.wingName || wingName,
@@ -228,7 +312,7 @@ const FlatMaster = ({ reportingDate }: { reportingDate: string }) => {
     });
 
     const validFlats = importedFlats.filter(
-      (flat) => flat.flatNumber && flat.carpetArea > 0
+      (flat) => flat.flatNumber && flat.carpetArea > 0 && flat.wingId
     );
 
     if (validFlats.length !== importedFlats.length) {
@@ -241,33 +325,37 @@ const FlatMaster = ({ reportingDate }: { reportingDate: string }) => {
       });
     }
 
-    setFlats((prev) => [...prev, ...validFlats]);
-
-    toast({
-      title: "Success",
-      description: `${validFlats.length} flats imported successfully`,
-    });
-  };
-
-  const handleInputChange = (field: keyof FlatData, value: string | number) => {
-    setCurrentFlat((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
-
-  const handleWingChange = (wingId: string) => {
-    const selectedWing = wings.find((wing) => wing.id === wingId);
-    if (selectedWing) {
-      setCurrentFlat((prev) => ({
-        ...prev,
-        wingId,
-        wingName: selectedWing.wingName,
-        projectName: selectedWing.projectName,
-        companyName: selectedWing.companyName,
+    try {
+      const apiDataArray = validFlats.map(flat => mapFlatToApi({
+        flatNumber: flat.flatNumber,
+        wingId: flat.wingId,
+        carpetArea: flat.carpetArea,
+        status: flat.status,
+        agreementValue: flat.agreementValue,
       }));
+
+      // Create all flats in Supabase
+      const results = await Promise.all(
+        apiDataArray.map(data => createFlatApi(data))
+      );
+
+      // Reload flats to get the full data with wing details
+      await loadFlats();
+
+      toast({
+        title: "Success",
+        description: `${validFlats.length} flats imported successfully`,
+      });
+    } catch (error) {
+      console.error("Error importing flats:", error);
+      toast({
+        title: "Error",
+        description: "Failed to import some flats. Please try again.",
+        variant: "destructive",
+      });
     }
   };
+
 
   const calculateWingAllocatedArea = (wingId: string) => {
     return flats
@@ -303,38 +391,11 @@ const FlatMaster = ({ reportingDate }: { reportingDate: string }) => {
     return { valid: true, message: "" };
   };
 
-  const handleSave = () => {
-    if (!currentFlat.flatNumber.trim() || !currentFlat.wingId) {
-      toast({
-        title: "Validation Error",
-        description: "Flat number and wing selection are required",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (currentFlat.carpetArea <= 0) {
-      toast({
-        title: "Validation Error",
-        description: "Carpet area must be greater than 0",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (isNaN(currentFlat.carpetArea)) {
-      toast({
-        title: "Validation Error",
-        description: "Carpet area must be a valid numeric value",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  const handleSave = async (values: z.infer<typeof flatSchema>) => {
     const duplicateFlat = flats.find(
       (flat) =>
-        flat.wingId === currentFlat.wingId &&
-        flat.flatNumber === currentFlat.flatNumber &&
+        flat.wingId === values.wingId &&
+        flat.flatNumber === values.flatNumber &&
         flat.id !== editingId
     );
 
@@ -348,8 +409,8 @@ const FlatMaster = ({ reportingDate }: { reportingDate: string }) => {
     }
 
     const validation = validateAreaAllocation(
-      currentFlat.wingId,
-      currentFlat.carpetArea,
+      values.wingId,
+      values.carpetArea,
       editingId || undefined
     );
     if (!validation.valid) {
@@ -361,61 +422,112 @@ const FlatMaster = ({ reportingDate }: { reportingDate: string }) => {
       return;
     }
 
-    if (editingId) {
-      setFlats((prev) =>
-        prev.map((flat) =>
-          flat.id === editingId ? { ...currentFlat, id: editingId } : flat
-        )
-      );
-      setEditingId(null);
-      toast({
-        title: "Success",
-        description: "Flat updated successfully",
+    try {
+      const selectedWing = wings.find((w) => w.id === values.wingId);
+      const apiData = mapFlatToApi({
+        flatNumber: values.flatNumber,
+        wingId: values.wingId,
+        carpetArea: values.carpetArea,
+        status: values.status,
+        agreementValue: values.agreementValue,
       });
-    } else {
-      const newFlat = { ...currentFlat, id: Date.now().toString() };
-      setFlats((prev) => [...prev, newFlat]);
+
+      if (editingId) {
+        const response = await updateFlatApi(apiData, editingId);
+        const updatedFlat: FlatData = {
+          id: response.id,
+          flatNumber: response.flat_number,
+          wingId: response.wing_id,
+          wingName: selectedWing?.wingName || "",
+          projectName: selectedWing?.projectName || "",
+          companyName: selectedWing?.companyName || "",
+          carpetArea: Number(response.carpet_area) || 0,
+          status: response.status || "Available",
+          agreementValue: Number(response.agreement_value) || 0,
+        };
+        setFlats((prev) =>
+          prev.map((flat) => (flat.id === editingId ? updatedFlat : flat))
+        );
+        toast({
+          title: "Success",
+          description: "Flat updated successfully",
+        });
+      } else {
+        const response = await createFlatApi(apiData);
+        const newFlat: FlatData = {
+          id: response.id,
+          flatNumber: response.flat_number,
+          wingId: response.wing_id,
+          wingName: selectedWing?.wingName || "",
+          projectName: selectedWing?.projectName || "",
+          companyName: selectedWing?.companyName || "",
+          carpetArea: Number(response.carpet_area) || 0,
+          status: response.status || "Available",
+          agreementValue: Number(response.agreement_value) || 0,
+        };
+        setFlats((prev) => [...prev, newFlat]);
+        toast({
+          title: "Success",
+          description: "Flat added successfully",
+        });
+      }
+
+      setEditingId(null);
+      form.reset({
+        flatNumber: "",
+        wingId: "",
+        carpetArea: 0,
+        status: "Available",
+        agreementValue: 0,
+      });
+    } catch (error) {
+      console.error("Error saving flat:", error);
       toast({
-        title: "Success",
-        description: "Flat added successfully",
+        title: "Error",
+        description: "Failed to save flat. Please try again.",
+        variant: "destructive",
       });
     }
-
-    setCurrentFlat({
-      id: "",
-      flatNumber: "",
-      wingId: "",
-      wingName: "",
-      projectName: "",
-      companyName: "",
-      carpetArea: 0,
-      status: "Available",
-      agreementValue: 0,
-    });
   };
 
   const handleEdit = (flat: FlatData) => {
-    setCurrentFlat(flat);
     setEditingId(flat.id);
+    form.reset({
+      flatNumber: flat.flatNumber,
+      wingId: flat.wingId,
+      carpetArea: flat.carpetArea,
+      status: flat.status || "Available",
+      agreementValue: flat.agreementValue || 0,
+    });
   };
 
-  const handleDelete = (id: string) => {
-    setFlats((prev) => prev.filter((flat) => flat.id !== id));
-    toast({
-      title: "Success",
-      description: "Flat deleted successfully",
-    });
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteFlatApi(id);
+      setFlats((prev) => prev.filter((flat) => flat.id !== id));
+      if (editingId === id) {
+        setEditingId(null);
+        form.reset();
+      }
+      toast({
+        title: "Success",
+        description: "Flat deleted successfully",
+      });
+    } catch (error) {
+      console.error("Error deleting flat:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete flat. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleCancel = () => {
     setEditingId(null);
-    setCurrentFlat({
-      id: "",
+    form.reset({
       flatNumber: "",
       wingId: "",
-      wingName: "",
-      projectName: "",
-      companyName: "",
       carpetArea: 0,
       status: "Available",
       agreementValue: 0,
@@ -534,167 +646,169 @@ const FlatMaster = ({ reportingDate }: { reportingDate: string }) => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="space-y-4">
-              <h3 className="font-medium text-gray-900 border-b pb-2">
-                Basic Information
-              </h3>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(handleSave)} className="space-y-6">
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-4">
+                  <h3 className="font-medium text-gray-900 border-b pb-2">
+                    Basic Information
+                  </h3>
 
-              <div>
-                <Label htmlFor="wing-select">Wing *</Label>
-                <Select
-                  value={currentFlat.wingId}
-                  onValueChange={handleWingChange}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a wing" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {wings.map((wing) => (
-                      <SelectItem key={wing.id} value={wing.id}>
-                        {wing.companyName} - {wing.projectName} -{" "}
-                        {wing.wingName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                  <FormField
+                    control={form.control}
+                    name="wingId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Wing *</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a wing" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {wings.map((wing) => (
+                              <SelectItem key={wing.id} value={wing.id}>
+                                {wing.companyName} - {wing.projectName} - {wing.wingName}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <div>
-                <Label htmlFor="company-select">Company Name *</Label>
-                <Select
-                  value={currentFlat.companyName || ""}
-                  onValueChange={(value) =>
-                    handleInputChange("companyName", value)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a company" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {companies.map((company) => (
-                      <SelectItem key={company.id} value={company.companyName}>
-                        {company.companyName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {currentFlat.wingId && (
-                <div className="p-3 bg-blue-50 rounded-lg">
-                  <h4 className="font-medium text-blue-900">
-                    Wing Area Summary
-                  </h4>
-                  {(() => {
-                    const summary = getWingAreaSummary(currentFlat.wingId);
+                  {form.watch("wingId") && (() => {
+                    const selectedWing = wings.find(w => w.id === form.watch("wingId"));
+                    const summary = getWingAreaSummary(form.watch("wingId"));
                     return (
-                      <div className="text-sm text-blue-800 mt-1">
-                        <p>Total Area: {summary.totalArea} sq.m</p>
-                        <p>Allocated: {summary.allocatedArea} sq.m</p>
-                        <p>Remaining: {summary.remainingArea} sq.m</p>
-                      </div>
+                      <>
+                        <div className="p-3 bg-blue-50 rounded-lg">
+                          <h4 className="font-medium text-blue-900">Wing Area Summary</h4>
+                          <div className="text-sm text-blue-800 mt-1">
+                            <p>Total Area: {summary.totalArea} sq.m</p>
+                            <p>Allocated: {summary.allocatedArea} sq.m</p>
+                            <p>Remaining: {summary.remainingArea} sq.m</p>
+                          </div>
+                        </div>
+                        {selectedWing && (
+                          <div className="p-3 bg-gray-50 rounded-lg">
+                            <h4 className="font-medium text-gray-900">Selected Wing Details</h4>
+                            <div className="text-sm text-gray-600 mt-1">
+                              <p>Company: {selectedWing.companyName}</p>
+                              <p>Project: {selectedWing.projectName}</p>
+                              <p>Wing: {selectedWing.wingName}</p>
+                            </div>
+                          </div>
+                        )}
+                      </>
                     );
                   })()}
+
+                  <FormField
+                    control={form.control}
+                    name="flatNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Flat Number *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., 101" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="carpetArea"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Carpet Area (Sq.m) *</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="Enter carpet area"
+                            {...field}
+                            onChange={(e) =>
+                              field.onChange(parseFloat(e.target.value) || 0)
+                            }
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
-              )}
 
-              <div>
-                <Label htmlFor="flat-number">Flat Number *</Label>
-                <Input
-                  id="flat-number"
-                  value={currentFlat.flatNumber}
-                  onChange={(e) =>
-                    handleInputChange("flatNumber", e.target.value)
-                  }
-                  placeholder="e.g., 101"
-                />
-              </div>
+                <div className="space-y-4">
+                  <h3 className="font-medium text-gray-900 border-b pb-2">
+                    Additional Details
+                  </h3>
 
-              <div>
-                <Label htmlFor="carpet-area">Carpet Area (Sq.m) *</Label>
-                <Input
-                  id="carpet-area"
-                  type="number"
-                  step="0.01"
-                  value={currentFlat.carpetArea}
-                  onChange={(e) =>
-                    handleInputChange(
-                      "carpetArea",
-                      parseFloat(e.target.value) || 0
-                    )
-                  }
-                  placeholder="Enter carpet area"
-                />
-              </div>
-            </div>
+                  <FormField
+                    control={form.control}
+                    name="agreementValue"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Agreement Value</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="Agreement value"
+                            {...field}
+                            onChange={(e) =>
+                              field.onChange(parseFloat(e.target.value) || 0)
+                            }
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-            <div className="space-y-4">
-              <h3 className="font-medium text-gray-900 border-b pb-2">
-                Additional Details
-              </h3>
-
-              <div>
-                <Label htmlFor="agreement-value">Agreement Value</Label>
-                <Input
-                  id="agreement-value"
-                  type="number"
-                  step="0.01"
-                  value={currentFlat.agreementValue || 0}
-                  onChange={(e) =>
-                    handleInputChange(
-                      "agreementValue",
-                      parseFloat(e.target.value) || 0
-                    )
-                  }
-                  placeholder="Agreement value"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="status">Status</Label>
-                <Select
-                  value={currentFlat.status}
-                  onValueChange={(value) => handleInputChange("status", value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Available">Available</SelectItem>
-                    <SelectItem value="Booked">Booked</SelectItem>
-                    <SelectItem value="Sold">Sold</SelectItem>
-                    <SelectItem value="Blocked">Blocked</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {currentFlat.wingId && (
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <h4 className="font-medium text-gray-900">
-                    Selected Wing Details
-                  </h4>
-                  <div className="text-sm text-gray-600 mt-1">
-                    <p>Company: {currentFlat.companyName}</p>
-                    <p>Project: {currentFlat.projectName}</p>
-                    <p>Wing: {currentFlat.wingName}</p>
-                  </div>
+                  <FormField
+                    control={form.control}
+                    name="status"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Status</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="Available">Available</SelectItem>
+                            <SelectItem value="Booked">Booked</SelectItem>
+                            <SelectItem value="Sold">Sold</SelectItem>
+                            <SelectItem value="Blocked">Blocked</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
 
-          <div className="flex justify-end gap-3">
-            {editingId && (
-              <Button onClick={handleCancel} variant="outline">
-                Cancel
-              </Button>
-            )}
-            <Button onClick={handleSave} className="flex items-center gap-2">
-              <Save className="h-4 w-4" />
-              {editingId ? "Update Flat" : "Save Flat"}
-            </Button>
-          </div>
+              <div className="flex justify-end gap-3">
+                {editingId && (
+                  <Button type="button" onClick={handleCancel} variant="outline">
+                    Cancel
+                  </Button>
+                )}
+                <Button type="submit" className="flex items-center gap-2">
+                  <Save className="h-4 w-4" />
+                  {editingId ? "Update Flat" : "Save Flat"}
+                </Button>
+              </div>
+            </form>
+          </Form>
         </CardContent>
       </Card>
 

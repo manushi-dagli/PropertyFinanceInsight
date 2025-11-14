@@ -1,4 +1,7 @@
 import { useState, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import {
   Card,
   CardContent,
@@ -16,6 +19,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { FileText, Save, Upload, TrendingUp, Edit, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -30,28 +41,39 @@ import {
 } from "@/api/project.api";
 import { getCompaniesListApi } from "@/api/company.api";
 
+const projectSchema = z.object({
+  companyId: z.string().min(1, "Company selection is required"),
+  projectName: z.string().min(1, "Project name is required"),
+  totalArea: z.number().positive("Total area must be greater than 0"),
+  estimatedLandCost: z.number().min(0).default(0),
+  estimatedConstructionCost: z.number().min(0).default(0),
+  reportDate: z.string().optional(),
+  actualLandCost: z.number().min(0).default(0),
+  actualConstructionCost: z.number().min(0).default(0),
+});
+
 const ProjectMaster = ({ reportingDate }: ProjectMasterProps) => {
   const { toast } = useToast();
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [currentProject, setCurrentProject] = useState<ProjectData>({
-    id: "",
-    companyId: "",
-    companyName: "",
-    projectName: "",
-    totalArea: 0,
-    estimatedLandCost: 0,
-    estimatedConstructionCost: 0,
-    totalEstimatedCost: 0,
-    reportDate: "",
-    actualLandCost: 0,
-    actualConstructionCost: 0,
-    totalActualCost: 0,
-    projectCompletionPercentage: "0.00",
-    constructionPercentage: "0.00",
-    revenueRecognized: false,
+
+  const form = useForm<z.infer<typeof projectSchema>>({
+    resolver: zodResolver(projectSchema),
+    defaultValues: {
+      companyId: "",
+      projectName: "",
+      totalArea: 0,
+      estimatedLandCost: 0,
+      estimatedConstructionCost: 0,
+      reportDate: reportingDate || "",
+      actualLandCost: 0,
+      actualConstructionCost: 0,
+    },
   });
+
+  // Watch form values for calculations
+  const watchedValues = form.watch();
 
   // Call the getCompanies API to fetch company data
   useEffect(() => {
@@ -61,8 +83,26 @@ const ProjectMaster = ({ reportingDate }: ProjectMasterProps) => {
 
   const getProjectsList = async () => {
     try {
-      const response = await getProjectsListApi();
-      setProjects(response.data);
+      const data = await getProjectsListApi();
+      // Map database column names (snake_case) to frontend types (camelCase)
+      const mappedData = (data || []).map((project: any) => ({
+        id: project.id,
+        companyId: project.company_id,
+        companyName: project.company_name || "",
+        projectName: project.project_name,
+        totalArea: Number(project.total_area) || 0,
+        estimatedLandCost: Number(project.estimated_land_cost) || 0,
+        estimatedConstructionCost: Number(project.estimated_construction_cost) || 0,
+        totalEstimatedCost: Number(project.total_estimated_cost) || 0,
+        reportDate: project.report_date || "",
+        actualLandCost: Number(project.actual_land_cost) || 0,
+        actualConstructionCost: Number(project.actual_construction_cost) || 0,
+        totalActualCost: Number(project.total_actual_cost) || 0,
+        projectCompletionPercentage: project.project_completion_percentage || "0.00",
+        constructionPercentage: project.construction_percentage || "0.00",
+        revenueRecognized: project.revenue_recognized || false,
+      }));
+      setProjects(mappedData);
       console.log("Projects fetched successfully");
     } catch (error) {
       console.error("Error fetching projects:", error);
@@ -76,8 +116,13 @@ const ProjectMaster = ({ reportingDate }: ProjectMasterProps) => {
 
   const getCompaniesList = async () => {
     try {
-      const response = await getCompaniesListApi();
-      setCompanies(response.data);
+      const data = await getCompaniesListApi();
+      // Map database column names (snake_case) to frontend types (camelCase)
+      const mappedData = (data || []).map((company: any) => ({
+        id: company.id,
+        companyName: company.company_name,
+      }));
+      setCompanies(mappedData);
       console.log("Companies fetched successfully");
     } catch (error) {
       console.error("Error fetching companies:", error);
@@ -90,94 +135,32 @@ const ProjectMaster = ({ reportingDate }: ProjectMasterProps) => {
   };
 
   // Auto-calculate derived fields
-  useEffect(() => {
-    const totalEstimated =
-      Number(currentProject.estimatedLandCost) +
-      Number(currentProject.estimatedConstructionCost);
-    const totalActual =
-      Number(currentProject.actualLandCost) + Number(currentProject.actualConstructionCost);
-    const projectCompletion =
-      totalEstimated > 0 ? (totalActual / totalEstimated) * 100 : 0;
-    const constructionCompletion =
-      currentProject.estimatedConstructionCost > 0
-        ? (currentProject.actualConstructionCost /
-            currentProject.estimatedConstructionCost) *
-          100
-        : "0.00";
-    const revenueRecognized = Number(constructionCompletion) >= 25;
-
-    setCurrentProject((prev) => ({
-      ...prev,
-      totalEstimatedCost: totalEstimated,
-      totalActualCost: totalActual,
-      projectCompletionPercentage: projectCompletion.toFixed(2),
-      constructionPercentage:
-        typeof constructionCompletion === "number"
-          ? constructionCompletion.toFixed(2)
-          : constructionCompletion,
-      revenueRecognized: revenueRecognized,
-    }));
-  }, [
-    currentProject.estimatedLandCost,
-    currentProject.estimatedConstructionCost,
-    currentProject.actualLandCost,
-    currentProject.actualConstructionCost,
-  ]);
+  const totalEstimatedCost =
+    Number(watchedValues.estimatedLandCost || 0) +
+    Number(watchedValues.estimatedConstructionCost || 0);
+  const totalActualCost =
+    Number(watchedValues.actualLandCost || 0) +
+    Number(watchedValues.actualConstructionCost || 0);
+  const projectCompletion =
+    totalEstimatedCost > 0 ? (totalActualCost / totalEstimatedCost) * 100 : 0;
+  const constructionCompletion =
+    Number(watchedValues.estimatedConstructionCost || 0) > 0
+      ? (Number(watchedValues.actualConstructionCost || 0) /
+          Number(watchedValues.estimatedConstructionCost || 0)) *
+        100
+      : 0;
+  const revenueRecognized = Number(constructionCompletion) >= 25;
 
   // Set report date from reporting date
   useEffect(() => {
     if (reportingDate) {
-      setCurrentProject((prev) => ({
-        ...prev,
-        reportDate: reportingDate,
-      }));
+      form.setValue("reportDate", reportingDate);
     }
-  }, [reportingDate]);
+  }, [reportingDate, form]);
 
-  const handleInputChange = (
-    field: keyof ProjectData,
-    value: string | number
-  ) => {
-    if (field === "companyId") {
-      const selectedCompany = companies.find((c) => c.id === value);
-      setCurrentProject((prev) => ({
-        ...prev,
-        companyId: value as string,
-        companyName: selectedCompany?.companyName || "",
-      }));
-      return;
-    }
-
-    const numericFields: (keyof ProjectData)[] = [
-      "totalArea",
-      "estimatedLandCost",
-      "estimatedConstructionCost",
-      "actualLandCost",
-      "actualConstructionCost",
-    ];
-
-    if (numericFields.includes(field)) {
-      const raw = (value as string).replace(/,/g, "");
-      if (!/^\d*\.?\d*$/.test(raw)) return;
-
-      const parsed = parseFloat(raw);
-      if (isNaN(parsed)) return;
-
-      setCurrentProject((prev) => ({
-        ...prev,
-        [field]: parsed,
-        // store number; formatting is done in display only
-      }));
-    } else {
-      setCurrentProject((prev) => ({
-        ...prev,
-        [field]: value,
-      }));
-    }
-  };
-
-  const handleSave = async () => {
-    if (!reportingDate) {
+  const handleSave = async (values: z.infer<typeof projectSchema>) => {
+    // Check if either the prop or form value has a reporting date
+    if (!reportingDate && !values.reportDate) {
       toast({
         title: "Validation Error",
         description: "Please set the reporting date first",
@@ -186,119 +169,111 @@ const ProjectMaster = ({ reportingDate }: ProjectMasterProps) => {
       return;
     }
 
-    if (!currentProject.companyId) {
-      toast({
-        title: "Validation Error",
-        description: "Please select a company",
-        variant: "destructive",
-      });
-      return;
-    }
+    const selectedCompany = companies.find((c) => c.id === values.companyId);
 
-    if (!currentProject.projectName.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Project name is required",
-        variant: "destructive",
-      });
-      return;
-    }
+    try {
+      const payload = {
+        company_id: values.companyId,
+        project_name: values.projectName,
+        total_area: values.totalArea,
+        estimated_land_cost: values.estimatedLandCost,
+        estimated_construction_cost: values.estimatedConstructionCost,
+        total_estimated_cost: totalEstimatedCost,
+        report_date: values.reportDate || reportingDate,
+        actual_land_cost: values.actualLandCost,
+        actual_construction_cost: values.actualConstructionCost,
+        total_actual_cost: totalActualCost,
+        project_completion_percentage: projectCompletion.toFixed(2),
+        construction_percentage: constructionCompletion.toFixed(2),
+        revenue_recognized: revenueRecognized,
+      };
 
-    // Enhanced validation for total area
-    if (currentProject.totalArea <= 0) {
-      toast({
-        title: "Validation Error",
-        description:
-          "Total Area of Construction cannot be zero or negative. Please enter a valid value.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (isNaN(currentProject.totalArea)) {
-      toast({
-        title: "Validation Error",
-        description:
-          "Total Area of Construction must be a valid numeric value.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (editingId) {
-      // Update existing project
-      try {
-        if (!currentProject.id) {
-          throw new Error("Project ID is required for update");
-        }
-        const response = await updateProjectApi(currentProject, editingId);
-        console.log("Project updated successfully:", response);
-        // update the project in the state
+      if (editingId) {
+        const response = await updateProjectApi(payload, editingId);
+        const updatedProject: ProjectData = {
+          id: response.id,
+          companyId: response.company_id,
+          companyName: selectedCompany?.companyName || "",
+          projectName: response.project_name,
+          totalArea: Number(response.total_area) || 0,
+          estimatedLandCost: Number(response.estimated_land_cost) || 0,
+          estimatedConstructionCost: Number(response.estimated_construction_cost) || 0,
+          totalEstimatedCost: Number(response.total_estimated_cost) || 0,
+          reportDate: response.report_date || "",
+          actualLandCost: Number(response.actual_land_cost) || 0,
+          actualConstructionCost: Number(response.actual_construction_cost) || 0,
+          totalActualCost: Number(response.total_actual_cost) || 0,
+          projectCompletionPercentage: response.project_completion_percentage || "0.00",
+          constructionPercentage: response.construction_percentage || "0.00",
+          revenueRecognized: response.revenue_recognized || false,
+        };
         setProjects((prev) =>
-          prev.map((p) =>
-            p.id === editingId ? { ...p, ...currentProject } : p
-          )
+          prev.map((p) => (p.id === editingId ? updatedProject : p))
         );
         toast({
           title: "Success",
           description: "Project updated successfully",
         });
-      } catch (error) {
-        console.error("Error updating project:", error);
-        toast({
-          title: "Error",
-          description: "Failed to update project. Please try again.",
-          variant: "destructive",
-        });
-      }
-    } else {
-      try {
-        const response = await createProjectApi(currentProject);
-        console.log("Project created successfully:", response);
+      } else {
+        const response = await createProjectApi(payload);
         const newProject: ProjectData = {
-          ...currentProject,
-          id: response.id, // Assuming the API returns the new project ID
+          id: response.id,
+          companyId: response.company_id,
+          companyName: selectedCompany?.companyName || "",
+          projectName: response.project_name,
+          totalArea: Number(response.total_area) || 0,
+          estimatedLandCost: Number(response.estimated_land_cost) || 0,
+          estimatedConstructionCost: Number(response.estimated_construction_cost) || 0,
+          totalEstimatedCost: Number(response.total_estimated_cost) || 0,
+          reportDate: response.report_date || "",
+          actualLandCost: Number(response.actual_land_cost) || 0,
+          actualConstructionCost: Number(response.actual_construction_cost) || 0,
+          totalActualCost: Number(response.total_actual_cost) || 0,
+          projectCompletionPercentage: response.project_completion_percentage || "0.00",
+          constructionPercentage: response.construction_percentage || "0.00",
+          revenueRecognized: response.revenue_recognized || false,
         };
         setProjects((prev) => [...prev, newProject]);
         toast({
           title: "Success",
           description: "Project added successfully",
         });
-      } catch (error) {
-        console.error("Error adding project:", error);
-        toast({
-          title: "Error",
-          description: "Failed to add project. Please try again.",
-          variant: "destructive",
-        });
       }
-    }
 
-    // Reset form
-    setEditingId(null);
-    setCurrentProject({
-      id: "",
-      companyId: "",
-      companyName: "",
-      projectName: "",
-      totalArea: 0,
-      estimatedLandCost: 0,
-      estimatedConstructionCost: 0,
-      totalEstimatedCost: 0,
-      reportDate: reportingDate,
-      actualLandCost: 0,
-      actualConstructionCost: 0,
-      totalActualCost: 0,
-      projectCompletionPercentage: "0.00",
-      constructionPercentage: "0.00",
-      revenueRecognized: false,
-    });
+      // Reset form
+      setEditingId(null);
+      form.reset({
+        companyId: "",
+        projectName: "",
+        totalArea: 0,
+        estimatedLandCost: 0,
+        estimatedConstructionCost: 0,
+        reportDate: reportingDate || "",
+        actualLandCost: 0,
+        actualConstructionCost: 0,
+      });
+    } catch (error) {
+      console.error("Error saving project:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save project. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleEdit = (projectToEdit: ProjectData) => {
-    console.log("Editing project:", projectToEdit);
-    setCurrentProject(projectToEdit);
-    setEditingId(projectToEdit.id);
+    setEditingId(projectToEdit.id || null);
+    form.reset({
+      companyId: projectToEdit.companyId,
+      projectName: projectToEdit.projectName,
+      totalArea: projectToEdit.totalArea,
+      estimatedLandCost: projectToEdit.estimatedLandCost,
+      estimatedConstructionCost: projectToEdit.estimatedConstructionCost,
+      reportDate: projectToEdit.reportDate,
+      actualLandCost: projectToEdit.actualLandCost,
+      actualConstructionCost: projectToEdit.actualConstructionCost,
+    });
   };
 
   const handleDelete = (id: string) => {
@@ -311,22 +286,15 @@ const ProjectMaster = ({ reportingDate }: ProjectMasterProps) => {
 
   const handleCancel = () => {
     setEditingId(null);
-    setCurrentProject({
-      id: "",
+    form.reset({
       companyId: "",
-      companyName: "",
       projectName: "",
       totalArea: 0,
       estimatedLandCost: 0,
       estimatedConstructionCost: 0,
-      totalEstimatedCost: 0,
-      reportDate: reportingDate,
+      reportDate: reportingDate || "",
       actualLandCost: 0,
       actualConstructionCost: 0,
-      totalActualCost: 0,
-      projectCompletionPercentage: "0.00",
-      constructionPercentage: "0.00",
-      revenueRecognized: false,
     });
   };
 
@@ -393,260 +361,313 @@ const ProjectMaster = ({ reportingDate }: ProjectMasterProps) => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* Basic Project Info */}
-            <div className="space-y-4">
-              <h3 className="font-medium text-gray-900 border-b pb-2">
-                Basic Information
-              </h3>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(handleSave)} className="space-y-6">
+              <div className="grid gap-6 md:grid-cols-2">
+                {/* Basic Project Info */}
+                <div className="space-y-4">
+                  <h3 className="font-medium text-gray-900 border-b pb-2">
+                    Basic Information
+                  </h3>
 
-              <div>
-                <Label htmlFor="company-select">Company *</Label>
-                <Select
-                  value={currentProject.companyId}
-                  onValueChange={(value) =>
-                    handleInputChange("companyId", value)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select Company" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {companies.map((company) => (
-                      <SelectItem key={company.id} value={company.id}>
-                        {company.companyName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                  <FormField
+                    control={form.control}
+                    name="companyId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Company *</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select Company" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {companies.map((company) => (
+                              <SelectItem key={company.id} value={company.id}>
+                                {company.companyName}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <div>
-                <Label htmlFor="project-name">Project Name *</Label>
-                <Input
-                  id="project-name"
-                  value={currentProject.projectName}
-                  onChange={(e) =>
-                    handleInputChange("projectName", e.target.value)
-                  }
-                  placeholder="e.g., Ojash"
-                />
-              </div>
+                  <FormField
+                    control={form.control}
+                    name="projectName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Project Name *</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="e.g., Ojash"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <div>
-                <Label htmlFor="total-area">
-                  Total Area of Construction (Sq. Mtr) *
-                </Label>
-                <Input
-                  id="total-area"
-                  type="text"
-                  step="0.01"
-                  value={currentProject.totalArea.toString()}
-                  onChange={(e) =>
-                    handleInputChange("totalArea", e.target.value)
-                  }
-                  placeholder="e.g., 11711.20"
-                />
-              </div>
+                  <FormField
+                    control={form.control}
+                    name="totalArea"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Total Area of Construction (Sq. Mtr) *</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="e.g., 11711.20"
+                            {...field}
+                            onChange={(e) =>
+                              field.onChange(parseFloat(e.target.value) || 0)
+                            }
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <div>
-                <Label htmlFor="report-date">Date of Report</Label>
-                <Input
-                  id="report-date"
-                  type="date"
-                  value={currentProject.reportDate}
-                  onChange={(e) =>
-                    handleInputChange("reportDate", e.target.value)
-                  }
-                  disabled={!!reportingDate}
-                  className={reportingDate ? "bg-gray-50" : ""}
-                />
-                {reportingDate && (
-                  <p className="text-xs text-gray-600 mt-1">
-                    Automatically set from global reporting date
-                  </p>
-                )}
-              </div>
-            </div>
+                  <FormField
+                    control={form.control}
+                    name="reportDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Date of Report</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="date"
+                            disabled={!!reportingDate}
+                            className={reportingDate ? "bg-gray-50" : ""}
+                            {...field}
+                          />
+                        </FormControl>
+                        {reportingDate && (
+                          <p className="text-xs text-gray-600 mt-1">
+                            Automatically set from global reporting date
+                          </p>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
-            {/* Estimated Costs */}
-            <div className="space-y-4">
-              <h3 className="font-medium text-gray-900 border-b pb-2">
-                Estimated Costs
-              </h3>
+                {/* Estimated Costs */}
+                <div className="space-y-4">
+                  <h3 className="font-medium text-gray-900 border-b pb-2">
+                    Estimated Costs
+                  </h3>
 
-              <div>
-                <Label htmlFor="est-land-cost">Estimated Land Cost (₹)</Label>
-                <Input
-                  id="est-land-cost"
-                  type="text"
-                  value={currentProject.estimatedLandCost || ""}
-                  onChange={(e) =>
-                    handleInputChange("estimatedLandCost", e.target.value)
-                  }
-                  placeholder="0.00"
-                />
-              </div>
+                  <FormField
+                    control={form.control}
+                    name="estimatedLandCost"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Estimated Land Cost (₹)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="0.00"
+                            {...field}
+                            onChange={(e) =>
+                              field.onChange(parseFloat(e.target.value) || 0)
+                            }
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <div>
-                <Label htmlFor="est-construction-cost">
-                  Estimated Construction Cost (₹)
-                </Label>
-                <Input
-                  id="est-construction-cost"
-                  type="text"
-                  step="0.01"
-                  value={currentProject.estimatedConstructionCost || ""}
-                  onChange={(e) =>
-                    handleInputChange(
-                      "estimatedConstructionCost",
-                      e.target.value
-                    )
-                  }
-                  placeholder="0.00"
-                />
-              </div>
+                  <FormField
+                    control={form.control}
+                    name="estimatedConstructionCost"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Estimated Construction Cost (₹)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="0.00"
+                            {...field}
+                            onChange={(e) =>
+                              field.onChange(parseFloat(e.target.value) || 0)
+                            }
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <div>
-                <Label htmlFor="total-est-cost">
-                  Total Estimated Project Cost (₹)
-                </Label>
-                <Input
-                  id="total-est-cost"
-                  type="text"
-                  step="0.01"
-                  value={currentProject.totalEstimatedCost}
-                  readOnly
-                  className="bg-gray-50"
-                />
-                <p className="text-xs text-gray-600 mt-1">
-                  Auto-calculated: Land Cost + Construction Cost
-                </p>
-              </div>
-            </div>
+                  <div>
+                    <Label htmlFor="total-est-cost">
+                      Total Estimated Project Cost (₹)
+                    </Label>
+                    <Input
+                      id="total-est-cost"
+                      type="number"
+                      step="0.01"
+                      value={totalEstimatedCost.toFixed(2)}
+                      readOnly
+                      className="bg-gray-50"
+                    />
+                    <p className="text-xs text-gray-600 mt-1">
+                      Auto-calculated: Land Cost + Construction Cost
+                    </p>
+                  </div>
+                </div>
 
-            <div className="space-y-4">
-              <h3 className="font-medium text-gray-900 border-b pb-2">
-                Actual Costs
-              </h3>
+                <div className="space-y-4">
+                  <h3 className="font-medium text-gray-900 border-b pb-2">
+                    Actual Costs
+                  </h3>
 
-              <div>
-                <Label htmlFor="actual-land-cost">Actual Land Cost (₹)</Label>
-                <Input
-                  id="actual-land-cost"
-                  type="text"
-                  step="0.01"
-                  value={currentProject.actualLandCost || ""}
-                  onChange={(e) =>
-                    handleInputChange("actualLandCost", e.target.value)
-                  }
-                  placeholder="0.00"
-                />
-              </div>
+                  <FormField
+                    control={form.control}
+                    name="actualLandCost"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Actual Land Cost (₹)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="0.00"
+                            {...field}
+                            onChange={(e) =>
+                              field.onChange(parseFloat(e.target.value) || 0)
+                            }
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <div>
-                <Label htmlFor="actual-construction-cost">
-                  Actual Construction Cost (₹)
-                </Label>
-                <Input
-                  id="actual-construction-cost"
-                  type="text"
-                  step="0.01"
-                  value={currentProject.actualConstructionCost || ""}
-                  onChange={(e) =>
-                    handleInputChange("actualConstructionCost", e.target.value)
-                  }
-                  placeholder="0.00"
-                />
-              </div>
+                  <FormField
+                    control={form.control}
+                    name="actualConstructionCost"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Actual Construction Cost (₹)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="0.00"
+                            {...field}
+                            onChange={(e) =>
+                              field.onChange(parseFloat(e.target.value) || 0)
+                            }
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <div>
-                <Label htmlFor="total-actual-cost">
-                  Total Actual Project Cost (₹)
-                </Label>
-                <Input
-                  id="total-actual-cost"
-                  type="text"
-                  step="0.01"
-                  value={currentProject.totalActualCost}
-                  readOnly
-                  className="bg-gray-50"
-                />
-                <p className="text-xs text-gray-600 mt-1">
-                  Auto-calculated: Actual Land + Actual Construction
-                </p>
-              </div>
-            </div>
+                  <div>
+                    <Label htmlFor="total-actual-cost">
+                      Total Actual Project Cost (₹)
+                    </Label>
+                    <Input
+                      id="total-actual-cost"
+                      type="number"
+                      step="0.01"
+                      value={totalActualCost.toFixed(2)}
+                      readOnly
+                      className="bg-gray-50"
+                    />
+                    <p className="text-xs text-gray-600 mt-1">
+                      Auto-calculated: Actual Land + Actual Construction
+                    </p>
+                  </div>
+                </div>
 
-            <div className="space-y-4">
-              <h3 className="font-medium text-gray-900 border-b pb-2">
-                Completion Metrics
-              </h3>
+                <div className="space-y-4">
+                  <h3 className="font-medium text-gray-900 border-b pb-2">
+                    Completion Metrics
+                  </h3>
 
-              <div>
-                <Label htmlFor="project-completion">
-                  Project Completion (%)
-                </Label>
-                <Input
-                  id="project-completion"
-                  type="number"
-                  step="0.01"
-                  value={currentProject.projectCompletionPercentage.toString()}
-                  readOnly
-                  className="bg-gray-50"
-                />
-                <p className="text-xs text-gray-600 mt-1">
-                  Auto-calculated: (Total Actual / Total Estimated) × 100
-                </p>
-              </div>
+                  <div>
+                    <Label htmlFor="project-completion">
+                      Project Completion (%)
+                    </Label>
+                    <Input
+                      id="project-completion"
+                      type="number"
+                      step="0.01"
+                      value={projectCompletion.toFixed(2)}
+                      readOnly
+                      className="bg-gray-50"
+                    />
+                    <p className="text-xs text-gray-600 mt-1">
+                      Auto-calculated: (Total Actual / Total Estimated) × 100
+                    </p>
+                  </div>
 
-              <div>
-                <Label htmlFor="construction-completion">
-                  Construction Completion (%)
-                </Label>
-                <Input
-                  id="construction-completion"
-                  type="number"
-                  step="0.01"
-                  value={currentProject.constructionPercentage.toString()}
-                  readOnly
-                  className="bg-gray-50"
-                />
-                <p className="text-xs text-gray-600 mt-1">
-                  Auto-calculated: (Actual Construction / Estimated
-                  Construction) × 100
-                </p>
-              </div>
+                  <div>
+                    <Label htmlFor="construction-completion">
+                      Construction Completion (%)
+                    </Label>
+                    <Input
+                      id="construction-completion"
+                      type="number"
+                      step="0.01"
+                      value={constructionCompletion.toFixed(2)}
+                      readOnly
+                      className="bg-gray-50"
+                    />
+                    <p className="text-xs text-gray-600 mt-1">
+                      Auto-calculated: (Actual Construction / Estimated
+                      Construction) × 100
+                    </p>
+                  </div>
 
-              <div>
-                <Label>Revenue Recognition Status</Label>
-                <div
-                  className={`p-3 rounded-lg flex items-center gap-2 ${
-                    currentProject.revenueRecognized
-                      ? "bg-green-50 text-green-800"
-                      : "bg-orange-50 text-orange-800"
-                  }`}
-                >
-                  <TrendingUp className="h-4 w-4" />
-                  {currentProject.revenueRecognized
-                    ? "Revenue Recognized (≥25% construction)"
-                    : "Work in Progress (<25% construction)"}
+                  <div>
+                    <Label>Revenue Recognition Status</Label>
+                    <div
+                      className={`p-3 rounded-lg flex items-center gap-2 ${
+                        revenueRecognized
+                          ? "bg-green-50 text-green-800"
+                          : "bg-orange-50 text-orange-800"
+                      }`}
+                    >
+                      <TrendingUp className="h-4 w-4" />
+                      {revenueRecognized
+                        ? "Revenue Recognized (≥25% construction)"
+                        : "Work in Progress (<25% construction)"}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
 
-          <div className="flex justify-end gap-3">
-            {editingId && (
-              <Button onClick={handleCancel} variant="outline">
-                Cancel
-              </Button>
-            )}
-            <Button onClick={handleSave} className="flex items-center gap-2">
-              <Save className="h-4 w-4" />
-              {editingId ? "Update Project" : "Save Project"}
-            </Button>
-          </div>
+              <div className="flex justify-end gap-3">
+                {editingId && (
+                  <Button type="button" onClick={handleCancel} variant="outline">
+                    Cancel
+                  </Button>
+                )}
+                <Button type="submit" className="flex items-center gap-2">
+                  <Save className="h-4 w-4" />
+                  {editingId ? "Update Project" : "Save Project"}
+                </Button>
+              </div>
+            </form>
+          </Form>
         </CardContent>
       </Card>
 
