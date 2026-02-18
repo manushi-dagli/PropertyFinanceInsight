@@ -1,26 +1,67 @@
-import { CompanyData } from "./../types/company.types";
-import api from "./../config/apiConfig";
+import { supabase } from "../lib/supabase";
 
-export const createCompanyApi = async (data: CompanyData) => {
-  const response = await api.post("/api/company", data);
+export interface CompanyApiData {
+  company_name: string;
+  email_address?: string;
+  company_address?: string;
+  contact_number?: string;
+  gst_number?: string;
+  pan_number?: string;
+  cin_number?: string;
+  contact_person_name?: string;
+}
 
-  return response.data;
+export const createCompanyApi = async (data: CompanyApiData) => {
+  const { data: result, error } = await supabase
+    .from("company")
+    .insert([data])
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return result;
 };
 
 export const getCompaniesListApi = async () => {
-  const response = await api.get("/api/company");
+  const { data, error } = await supabase
+    .from("company")
+    .select("*")
+    .order("created_at", { ascending: false });
 
-  return response.data;
+  if (error) {
+    throw error;
+  }
+
+  return data;
 };
 
-export const updateCompanyApi = async (data: CompanyData, id: string) => {
-  const response = await api.put(`/api/company/${id}`, data);
+export const updateCompanyApi = async (data: Partial<CompanyApiData>, id: string) => {
+  const { data: result, error } = await supabase
+    .from("company")
+    .update(data)
+    .eq("id", id)
+    .select()
+    .single();
 
-  return response.data;
-}
+  if (error) {
+    throw error;
+  }
+
+  return result;
+};
 
 export const deleteCompanyApi = async (id: string) => {
-  const response = await api.delete(`/api/company/${id}`);
+  const { error } = await supabase
+    .from("company")
+    .delete()
+    .eq("id", id);
 
-  return response.data;
+  if (error) {
+    throw error;
+  }
+
+  return { success: true };
 };

@@ -1,11 +1,36 @@
 import { useState, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Building2, Save, Edit, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  createWingApi,
+  getWingsListApi,
+  updateWingApi,
+  deleteWingApi,
+} from "@/api/wing.api";
+import { getProjectsListApi } from "@/api/project.api";
+import { mapWingToApi, mapWingFromApi } from "@/utils/dataMapper";
+
+const wingSchema = z.object({
+  wingName: z.string().min(1, "Wing name is required"),
+  projectId: z.string().min(1, "Project selection is required"),
+  constructionArea: z.number().positive("Construction area must be greater than 0"),
+});
 
 interface WingData {
   id: string;
@@ -20,7 +45,7 @@ interface Project {
   id: string;
   projectName: string;
   companyName: string;
-  totalPlotArea: number;
+  totalArea: number;
 }
 
 const WingMaster = ({ reportingDate }: { reportingDate: string }) => {
@@ -28,54 +53,57 @@ const WingMaster = ({ reportingDate }: { reportingDate: string }) => {
   const [wings, setWings] = useState<WingData[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [currentWing, setCurrentWing] = useState<WingData>({
-    id: "",
-    wingName: "",
-    projectId: "",
-    projectName: "",
-    companyName: "",
-    constructionArea: 0
+
+  const form = useForm<z.infer<typeof wingSchema>>({
+    resolver: zodResolver(wingSchema),
+    defaultValues: {
+      wingName: "",
+      projectId: "",
+      constructionArea: 0,
+    },
   });
 
-  // Load projects from localStorage
+  // Load projects and wings from Supabase
   useEffect(() => {
-    const savedProjects = localStorage.getItem('projects');
-    if (savedProjects) {
-      setProjects(JSON.parse(savedProjects));
-    }
+    loadProjects();
+    loadWings();
   }, []);
 
-  // Load wings from localStorage
-  useEffect(() => {
-    const savedWings = localStorage.getItem('wings');
-    if (savedWings) {
-      setWings(JSON.parse(savedWings));
-    }
-  }, []);
-
-  // Save wings to localStorage
-  useEffect(() => {
-    localStorage.setItem('wings', JSON.stringify(wings));
-  }, [wings]);
-
-  const handleInputChange = (field: keyof WingData, value: string | number) => {
-    setCurrentWing(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  const handleProjectChange = (projectId: string) => {
-    const selectedProject = projects.find(project => project.id === projectId);
-    if (selectedProject) {
-      setCurrentWing(prev => ({
-        ...prev,
-        projectId,
-        projectName: selectedProject.projectName,
-        companyName: selectedProject.companyName
+  const loadProjects = async () => {
+    try {
+      const data = await getProjectsListApi();
+      const mappedProjects = (data || []).map((project: any) => ({
+        id: project.id,
+        projectName: project.project_name,
+        companyName: project.company_name || "",
+        totalArea: Number(project.total_area) || 0,
       }));
+      setProjects(mappedProjects);
+    } catch (error) {
+      console.error("Error loading projects:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load projects",
+        variant: "destructive",
+      });
     }
   };
+
+  const loadWings = async () => {
+    try {
+      const data = await getWingsListApi();
+      const mappedWings = (data || []).map(mapWingFromApi);
+      setWings(mappedWings);
+    } catch (error) {
+      console.error("Error loading wings:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load wings",
+        variant: "destructive",
+      });
+    }
+  };
+
 
   const calculateProjectAllocatedArea = (projectId: string) => {
     return wings
@@ -93,48 +121,21 @@ const WingMaster = ({ reportingDate }: { reportingDate: string }) => {
 
     const totalAfterAddition = currentAllocated + newConstructionArea;
 
-    if (totalAfterAddition > project.totalPlotArea) {
+    if (totalAfterAddition > project.totalArea) {
       return {
         valid: false,
-        message: `The Construction Area for this wing exceeds the Total Area of Construction. Total Project Area: ${project.totalPlotArea} sq.m, Currently allocated: ${currentAllocated} sq.m, Remaining: ${project.totalPlotArea - currentAllocated} sq.m`
+        message: `The Construction Area for this wing exceeds the Total Area of Construction. Total Project Area: ${project.totalArea} sq.m, Currently allocated: ${currentAllocated} sq.m, Remaining: ${project.totalArea - currentAllocated} sq.m`
       };
     }
 
     return { valid: true, message: "" };
   };
 
-  const handleSave = () => {
-    if (!currentWing.wingName.trim() || !currentWing.projectId) {
-      toast({
-        title: "Validation Error",
-        description: "Wing name and project selection are required",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (currentWing.constructionArea <= 0) {
-      toast({
-        title: "Validation Error",
-        description: "Construction area must be greater than 0",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (isNaN(currentWing.constructionArea)) {
-      toast({
-        title: "Validation Error",
-        description: "Construction area must be a valid numeric value",
-        variant: "destructive"
-      });
-      return;
-    }
-
+  const handleSave = async (values: z.infer<typeof wingSchema>) => {
     // Check for duplicate wing name in the same project
     const duplicateWing = wings.find(wing => 
-      wing.projectId === currentWing.projectId && 
-      wing.wingName.toLowerCase() === currentWing.wingName.toLowerCase() &&
+      wing.projectId === values.projectId && 
+      wing.wingName.toLowerCase() === values.wingName.toLowerCase() &&
       wing.id !== editingId
     );
 
@@ -148,7 +149,7 @@ const WingMaster = ({ reportingDate }: { reportingDate: string }) => {
     }
 
     // Enhanced area validation
-    const validation = validateAreaAllocation(currentWing.projectId, currentWing.constructionArea, editingId || undefined);
+    const validation = validateAreaAllocation(values.projectId, values.constructionArea, editingId || undefined);
     if (!validation.valid) {
       toast({
         title: "Area Validation Error",
@@ -158,59 +159,93 @@ const WingMaster = ({ reportingDate }: { reportingDate: string }) => {
       return;
     }
 
-    if (editingId) {
-      // Update existing wing
-      setWings(prev => prev.map(wing => 
-        wing.id === editingId ? { ...currentWing, id: editingId } : wing
-      ));
+    try {
+      const selectedProject = projects.find(p => p.id === values.projectId);
+      const wingData: WingData = {
+        id: editingId || "",
+        wingName: values.wingName,
+        projectId: values.projectId,
+        projectName: selectedProject?.projectName || "",
+        companyName: selectedProject?.companyName || "",
+        constructionArea: values.constructionArea,
+      };
+
+      if (editingId) {
+        const apiData = mapWingToApi(wingData);
+        const response = await updateWingApi(apiData, editingId);
+        const updatedWing = mapWingFromApi(response);
+        setWings(prev => prev.map(wing => 
+          wing.id === editingId ? updatedWing : wing
+        ));
+        toast({
+          title: "Success",
+          description: "Wing updated successfully"
+        });
+      } else {
+        const apiData = mapWingToApi(wingData);
+        const response = await createWingApi(apiData);
+        const newWing = mapWingFromApi(response);
+        setWings(prev => [...prev, newWing]);
+        toast({
+          title: "Success",
+          description: "Wing added successfully"
+        });
+      }
+
+      // Reset form
       setEditingId(null);
-      toast({
-        title: "Success",
-        description: "Wing updated successfully"
+      form.reset({
+        wingName: "",
+        projectId: "",
+        constructionArea: 0,
       });
-    } else {
-      // Add new wing
-      const newWing = { ...currentWing, id: Date.now().toString() };
-      setWings(prev => [...prev, newWing]);
+    } catch (error) {
+      console.error("Error saving wing:", error);
       toast({
-        title: "Success",
-        description: "Wing added successfully"
+        title: "Error",
+        description: "Failed to save wing. Please try again.",
+        variant: "destructive",
       });
     }
-
-    // Reset form
-    setCurrentWing({
-      id: "",
-      wingName: "",
-      projectId: "",
-      projectName: "",
-      companyName: "",
-      constructionArea: 0
-    });
   };
 
   const handleEdit = (wing: WingData) => {
-    setCurrentWing(wing);
     setEditingId(wing.id);
+    form.reset({
+      wingName: wing.wingName,
+      projectId: wing.projectId,
+      constructionArea: wing.constructionArea,
+    });
   };
 
-  const handleDelete = (id: string) => {
-    setWings(prev => prev.filter(wing => wing.id !== id));
-    toast({
-      title: "Success",
-      description: "Wing deleted successfully"
-    });
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteWingApi(id);
+      setWings(prev => prev.filter(wing => wing.id !== id));
+      if (editingId === id) {
+        setEditingId(null);
+        form.reset();
+      }
+      toast({
+        title: "Success",
+        description: "Wing deleted successfully"
+      });
+    } catch (error) {
+      console.error("Error deleting wing:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete wing. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleCancel = () => {
     setEditingId(null);
-    setCurrentWing({
-      id: "",
+    form.reset({
       wingName: "",
       projectId: "",
-      projectName: "",
-      companyName: "",
-      constructionArea: 0
+      constructionArea: 0,
     });
   };
 
@@ -218,11 +253,13 @@ const WingMaster = ({ reportingDate }: { reportingDate: string }) => {
     const project = projects.find(p => p.id === projectId);
     const allocatedArea = calculateProjectAllocatedArea(projectId);
     return {
-      totalArea: project?.totalPlotArea || 0,
+      totalArea: project?.totalArea || 0,
       allocatedArea,
-      remainingArea: (project?.totalPlotArea || 0) - allocatedArea
+      remainingArea: (project?.totalArea || 0) - allocatedArea
     };
   };
+
+  const selectedProjectId = form.watch("projectId");
 
   return (
     <div className="space-y-6">
@@ -250,93 +287,127 @@ const WingMaster = ({ reportingDate }: { reportingDate: string }) => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* Basic Information */}
-            <div className="space-y-4">
-              <h3 className="font-medium text-gray-900 border-b pb-2">Basic Information</h3>
-              
-              <div>
-                <Label htmlFor="project-select">Project *</Label>
-                <Select value={currentWing.projectId} onValueChange={handleProjectChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a project" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.companyName} - {project.projectName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(handleSave)} className="space-y-6">
+              <div className="grid gap-6 md:grid-cols-2">
+                {/* Basic Information */}
+                <div className="space-y-4">
+                  <h3 className="font-medium text-gray-900 border-b pb-2">Basic Information</h3>
+                  
+                  <FormField
+                    control={form.control}
+                    name="projectId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Project *</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a project" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {projects.map((project) => (
+                              <SelectItem key={project.id} value={project.id}>
+                                {project.companyName} - {project.projectName}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              {currentWing.projectId && (
-                <div className="p-3 bg-blue-50 rounded-lg">
-                  <h4 className="font-medium text-blue-900">Project Area Summary</h4>
-                  {(() => {
-                    const summary = getProjectAreaSummary(currentWing.projectId);
-                    return (
-                      <div className="text-sm text-blue-800 mt-1">
-                        <p>Total Area: {summary.totalArea} sq.m</p>
-                        <p>Allocated: {summary.allocatedArea} sq.m</p>
-                        <p>Remaining: {summary.remainingArea} sq.m</p>
+                  {selectedProjectId && (
+                    <div className="p-3 bg-blue-50 rounded-lg">
+                      <h4 className="font-medium text-blue-900">Project Area Summary</h4>
+                      {(() => {
+                        const summary = getProjectAreaSummary(selectedProjectId);
+                        const selectedProject = projects.find(p => p.id === selectedProjectId);
+                        return (
+                          <div className="text-sm text-blue-800 mt-1">
+                            <p>Total Area: {summary.totalArea} sq.m</p>
+                            <p>Allocated: {summary.allocatedArea} sq.m</p>
+                            <p>Remaining: {summary.remainingArea} sq.m</p>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  <FormField
+                    control={form.control}
+                    name="wingName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Wing Name *</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="e.g., A, B, North Wing"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="constructionArea"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Construction Area (Sq.m) *</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="Enter construction area"
+                            {...field}
+                            onChange={(e) =>
+                              field.onChange(parseFloat(e.target.value) || 0)
+                            }
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Project Details */}
+                <div className="space-y-4">
+                  <h3 className="font-medium text-gray-900 border-b pb-2">Project Details</h3>
+                  
+                  {selectedProjectId && (() => {
+                    const selectedProject = projects.find(p => p.id === selectedProjectId);
+                    return selectedProject ? (
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <h4 className="font-medium text-gray-900">Selected Project Details</h4>
+                        <div className="text-sm text-gray-600 mt-1">
+                          <p>Company: {selectedProject.companyName}</p>
+                          <p>Project: {selectedProject.projectName}</p>
+                        </div>
                       </div>
-                    );
+                    ) : null;
                   })()}
                 </div>
-              )}
-
-              <div>
-                <Label htmlFor="wing-name">Wing Name *</Label>
-                <Input
-                  id="wing-name"
-                  value={currentWing.wingName}
-                  onChange={(e) => handleInputChange("wingName", e.target.value)}
-                  placeholder="e.g., A, B, North Wing"
-                />
               </div>
 
-              <div>
-                <Label htmlFor="construction-area">Construction Area (Sq.m) *</Label>
-                <Input
-                  id="construction-area"
-                  type="number"
-                  step="0.01"
-                  value={currentWing.constructionArea}
-                  onChange={(e) => handleInputChange("constructionArea", parseFloat(e.target.value) || 0)}
-                  placeholder="Enter construction area"
-                />
+              <div className="flex justify-end gap-3">
+                {editingId && (
+                  <Button type="button" onClick={handleCancel} variant="outline">
+                    Cancel
+                  </Button>
+                )}
+                <Button type="submit" className="flex items-center gap-2">
+                  <Save className="h-4 w-4" />
+                  {editingId ? "Update Wing" : "Save Wing"}
+                </Button>
               </div>
-            </div>
-
-            {/* Project Details */}
-            <div className="space-y-4">
-              <h3 className="font-medium text-gray-900 border-b pb-2">Project Details</h3>
-              
-              {currentWing.projectId && (
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <h4 className="font-medium text-gray-900">Selected Project Details</h4>
-                  <div className="text-sm text-gray-600 mt-1">
-                    <p>Company: {currentWing.companyName}</p>
-                    <p>Project: {currentWing.projectName}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3">
-            {editingId && (
-              <Button onClick={handleCancel} variant="outline">
-                Cancel
-              </Button>
-            )}
-            <Button onClick={handleSave} className="flex items-center gap-2">
-              <Save className="h-4 w-4" />
-              {editingId ? "Update Wing" : "Save Wing"}
-            </Button>
-          </div>
+            </form>
+          </Form>
         </CardContent>
       </Card>
 
